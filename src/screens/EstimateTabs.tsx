@@ -27,8 +27,8 @@ function useAiEnabled() {
   return enabled;
 }
 
-async function requestEstimate(body: { image?: string; description?: string; restaurant?: string; kind: string }): Promise<Estimate> {
-  const res = await fetch('/api/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function requestEstimate(body: { image?: string; description?: string; restaurant?: string; kind: string }, signal?: AbortSignal): Promise<Estimate> {
+  const res = await fetch('/api/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || `Estimate failed (${res.status})`);
   return d as Estimate;
@@ -61,6 +61,62 @@ function NoAi() {
     <div className="callout warn small">
       AI estimates aren't switched on yet. Add <b>GEMINI_API_KEY</b> (free from Google AI Studio) in your Vercel project (Settings → Environment Variables) and redeploy.
       Until then, use Search or Quick add.
+    </div>
+  );
+}
+
+// ---------- running an estimate (cancellable) ----------
+function useEstimateRun(onResult: (e: Estimate) => void) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const ctrl = useRef<AbortController | null>(null);
+  useEffect(() => () => ctrl.current?.abort(), []);
+  const run = async (body: Parameters<typeof requestEstimate>[0]) => {
+    ctrl.current?.abort();
+    const c = new AbortController();
+    ctrl.current = c;
+    setBusy(true);
+    setErr('');
+    try {
+      onResult(await requestEstimate(body, c.signal));
+    } catch (e) {
+      if ((e as Error).name !== 'AbortError') setErr((e as Error).message);
+    } finally {
+      if (ctrl.current === c) setBusy(false);
+    }
+  };
+  const cancel = () => {
+    ctrl.current?.abort();
+    ctrl.current = null;
+    setBusy(false);
+  };
+  return { busy, err, setErr, run, cancel };
+}
+
+// ---------- loading state ----------
+const PHOTO_MSGS = ['Looking at your plate…', 'Spotting each food…', 'Judging portion sizes…', 'Counting the sauces…', 'Adding it all up…'];
+const OUT_MSGS = ['Checking the menu…', 'Looking up the nutrition…', 'Sizing up the portions…', 'Counting sides and drinks…', 'Adding it all up…'];
+
+export function Estimating({ messages, onCancel }: { messages: string[]; onCancel?: () => void }) {
+  const [i, setI] = useState(0);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % messages.length), 1800);
+    const s = setTimeout(() => setSlow(true), 15000);
+    return () => {
+      clearInterval(t);
+      clearTimeout(s);
+    };
+  }, [messages.length]);
+  return (
+    <div className="card estimating" role="status" aria-live="polite">
+      <div className="orb">
+        <img src="/logo.png" alt="" />
+      </div>
+      <div key={i} className="msg">{messages[i]}</div>
+      <div className="dots"><i /><i /><i /></div>
+      <p className="small muted" style={{ margin: 0 }}>{slow ? 'Taking a bit longer than usual…' : 'This usually takes a few seconds.'}</p>
+      {onCancel && <button className="link-btn" onClick={onCancel}>Cancel</button>}
     </div>
   );
 }
@@ -166,13 +222,13 @@ export function PhotoTab({ date, slot, setSlot, onDone }: { date: string; slot: 
   const enabled = useAiEnabled();
   const [image, setImage] = useState<string | null>(null);
   const [desc, setDesc] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
   const [est, setEst] = useState<Estimate | null>(null);
+  const { busy, err, setErr, run, cancel } = useEstimateRun(setEst);
   const camera = useRef<HTMLInputElement>(null);
   const library = useRef<HTMLInputElement>(null);
 
   if (est) return <EstimateResult est={est} date={date} slot={slot} setSlot={setSlot} onDone={onDone} onRetry={() => { setEst(null); setImage(null); setDesc(''); }} />;
+  if (busy) return <Estimating messages={image ? PHOTO_MSGS : OUT_MSGS} onCancel={cancel} />;
 
   const pick = async (f?: File) => {
     if (!f) return;
@@ -217,19 +273,9 @@ export function PhotoTab({ date, slot, setSlot, onDone }: { date: string; slot: 
       <button
         className="btn block"
         disabled={busy || enabled === false || (!image && !desc.trim())}
-        onClick={async () => {
-          setBusy(true);
-          setErr('');
-          try {
-            setEst(await requestEstimate({ image: image ?? undefined, description: desc, kind: 'photo' }));
-          } catch (e) {
-            setErr((e as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
+        onClick={() => run({ image: image ?? undefined, description: desc, kind: 'photo' })}
       >
-        <Icon name="sparkle" size={18} /> {busy ? 'Estimating…' : 'Estimate'}
+        <Icon name="sparkle" size={18} /> Estimate
       </button>
     </div>
   );
@@ -247,12 +293,12 @@ function Describe({ date, slot, setSlot, onDone }: { date: string; slot: MealSlo
   const [place, setPlace] = useState('');
   const [order, setOrder] = useState('');
   const [image, setImage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
   const [est, setEst] = useState<Estimate | null>(null);
+  const { busy, err, run, cancel } = useEstimateRun(setEst);
   const file = useRef<HTMLInputElement>(null);
 
   if (est) return <EstimateResult est={est} date={date} slot={slot} setSlot={setSlot} onDone={onDone} onRetry={() => setEst(null)} />;
+  if (busy) return <Estimating messages={OUT_MSGS} onCancel={cancel} />;
 
   return (
     <div className="stack">
@@ -283,19 +329,9 @@ function Describe({ date, slot, setSlot, onDone }: { date: string; slot: MealSlo
       <button
         className="btn block"
         disabled={busy || enabled === false || !order.trim()}
-        onClick={async () => {
-          setBusy(true);
-          setErr('');
-          try {
-            setEst(await requestEstimate({ restaurant: place, description: order, image: image ?? undefined, kind: 'restaurant' }));
-          } catch (e) {
-            setErr((e as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
+        onClick={() => run({ restaurant: place, description: order, image: image ?? undefined, kind: 'restaurant' })}
       >
-        <Icon name="sparkle" size={18} /> {busy ? 'Estimating…' : 'Estimate'}
+        <Icon name="sparkle" size={18} /> Estimate
       </button>
     </div>
   );

@@ -327,3 +327,30 @@ ol.steps-list li { margin: 4px 0; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Estimating loader ---------- */
+.estimating { display: grid; justify-items: center; gap: 14px; padding: 28px 16px; text-align: center; }
+.estimating .orb { position: relative; width: 112px; height: 112px; display: grid; place-items: center; }
+.estimating .orb::before,
+.estimating .orb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--green);
+  opacity: 0;
+  animation: ripple 2s ease-out infinite;
+}
+.estimating .orb::after { animation-delay: 1s; }
+.estimating .orb img { width: 76px; height: 76px; border-radius: 50%; background: #fff; animation: bob 1.4s ease-in-out infinite; position: relative; z-index: 1; }
+.estimating .msg { font-weight: 800; font-size: 18px; min-height: 26px; animation: fadein 0.4s ease; }
+.estimating .dots { display: flex; gap: 6px; }
+.estimating .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: dot 1.2s ease-in-out infinite; }
+.estimating .dots i:nth-child(2) { animation-delay: 0.15s; }
+.estimating .dots i:nth-child(3) { animation-delay: 0.3s; }
+.spin { animation: spin 1s linear infinite; display: inline-flex; }
+@keyframes ripple { 0% { transform: scale(0.7); opacity: 0.7; } 100% { transform: scale(1.35); opacity: 0; } }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-8px) rotate(6deg); } }
+@keyframes dot { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

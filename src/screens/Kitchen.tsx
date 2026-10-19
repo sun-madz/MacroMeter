@@ -7,6 +7,7 @@ import { addLog, logsFor, setState, sumNutrition, uid, useStore, type Ingredient
 import { Scanner as BarcodeScanner } from '../components/Scanner';
 import { FillDot, Icon, Sheet, r0, toast } from '../components/ui';
 import { AddFood } from './AddFood';
+import { Estimating } from './EstimateTabs';
 
 type Tab = 'pantry' | 'menus' | 'cook' | 'meals';
 
@@ -235,9 +236,10 @@ function Menus({ goSettings }: { goSettings: () => void }) {
 
       {aiEnabled && (
         <button className="btn outline" onClick={askAi} disabled={aiBusy}>
-          <Icon name="sparkle" size={18} /> {aiBusy ? 'Thinking up meals…' : 'Ask the AI chef for new ideas'}
+          <span className={aiBusy ? 'spin' : ''}><Icon name="sparkle" size={18} /></span> {aiBusy ? 'Thinking up meals…' : 'Ask the AI chef for new ideas'}
         </button>
       )}
+      {aiBusy && <Estimating messages={['Raiding your pantry…', 'Matching ingredients…', 'Balancing the macros…', 'Plating up ideas…']} />}
       {aiErr && <div className="error">{aiErr}</div>}
       {ai.map((m, i) => (
         <MenuCard
