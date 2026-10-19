@@ -14,7 +14,7 @@ A calm, safe calorie-deficit and macro tracker. React + Vite, deployed on Vercel
 - **Macros** after picking a deficit: Higher protein (30/45/25), Balanced (20/50/30), Lower carb (35/30/35) or custom.
 - **Intuitive eating mode** (Settings): hides all calorie numbers. The day shows as a filling circle with protein/carbs/fat circles, each food shows a small fill dot, and quick add works by portion size.
 - **Barcode scanner** for snacks and ingredients (camera, works on iPhone and Android over https), with product data from [Open Food Facts](https://world.openfoodfacts.org). Unknown barcodes can be added once and are remembered.
-- **Photo estimate**: snap or upload a meal photo, optionally describe it, and get an itemised estimate you can trim and scale (½× to 2×) before logging. Needs `ANTHROPIC_API_KEY`.
+- **Photo estimate**: snap or upload a meal photo, optionally describe it, and get an itemised estimate you can trim and scale (½× to 2×) before logging. Needs an AI key (see Deploy).
 - **Eating out**: describe a restaurant or takeaway order (Taco Bell, McDonald's, mamak…) including mixed rice stalls, with an optional photo for an AI estimate that uses chains' published nutrition where known.
 - **Plan start date** in Settings: progress, start weight and the chart are measured from it.
 - **Kitchen**
@@ -43,7 +43,7 @@ The `/api` functions only run on Vercel (or with `npx vercel dev`). Without them
    git push -u origin main
    ```
 2. In Vercel: **Add New → Project → Import** the repo. The framework (Vite) and settings come from `vercel.json`. Click **Deploy**.
-3. Optional AI features (photo estimates, eating-out estimates, AI chef): in the Vercel project, **Settings → Environment Variables**, add `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`, default `claude-haiku-5-5`), then redeploy. Photo/eating-out estimates and the "Ask the AI chef" button switch on automatically.
+3. Optional AI features (photo estimates, eating-out estimates, AI chef): in the Vercel project, **Settings → Environment Variables**, add `GEMINI_API_KEY` with a free key from [Google AI Studio](https://aistudio.google.com/apikey) (optionally `GEMINI_MODEL`, default `gemini-3.5-flash-lite`), or `ANTHROPIC_API_KEY` for Claude. Redeploy and the features switch on automatically.
 
 Open the Vercel link on your phone and use **Add to Home Screen** to install it.
 

@@ -59,7 +59,7 @@ function resizeImage(file: File, max = 1024): Promise<string> {
 function NoAi() {
   return (
     <div className="callout warn small">
-      AI estimates aren't switched on yet. Add <b>ANTHROPIC_API_KEY</b> in your Vercel project (Settings → Environment Variables) and redeploy.
+      AI estimates aren't switched on yet. Add <b>GEMINI_API_KEY</b> (free from Google AI Studio) in your Vercel project (Settings → Environment Variables) and redeploy.
       Until then, use Search or Quick add.
     </div>
   );
