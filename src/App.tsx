@@ -5,7 +5,7 @@ import { Icon, ToastHost } from './components/ui';
 import { Onboarding } from './screens/Onboarding';
 import { PlanPicker } from './screens/PlanPicker';
 import { Today } from './screens/Today';
-import { AddFood } from './screens/AddFood';
+import { AddFood, type Tab as AddTab } from './screens/AddFood';
 import { Kitchen } from './screens/Kitchen';
 import { Progress } from './screens/Progress';
 import { Settings } from './screens/Settings';
@@ -16,7 +16,7 @@ export default function App() {
   const s = useStore();
   const [view, setView] = useState<View>('today');
   const [date, setDate] = useState(todayKey());
-  const [adding, setAdding] = useState<{ slot?: MealSlot } | null>(null);
+  const [adding, setAdding] = useState<{ slot?: MealSlot; tab?: AddTab } | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [choosingPlan, setChoosingPlan] = useState(false);
 
@@ -81,7 +81,7 @@ export default function App() {
   } else {
     screen = (
       <>
-        {view === 'today' && <Today date={date} setDate={setDate} onAdd={(slot) => setAdding({ slot })} goProgress={() => setView('progress')} />}
+        {view === 'today' && <Today date={date} setDate={setDate} onAdd={(slot, tab) => setAdding({ slot, tab })} goProgress={() => setView('progress')} />}
         {view === 'kitchen' && <Kitchen goSettings={() => setView('settings')} />}
         {view === 'progress' && (
           <Progress
@@ -104,7 +104,7 @@ export default function App() {
           <NavBtn icon="gear" label="Settings" on={view === 'settings'} onClick={() => setView('settings')} />
         </nav>
 
-        {adding && <AddFood mode="log" date={view === 'today' ? date : todayKey()} slot={adding.slot} onClose={() => setAdding(null)} />}
+        {adding && <AddFood mode="log" date={view === 'today' ? date : todayKey()} slot={adding.slot} startTab={adding.tab} onClose={() => setAdding(null)} />}
       </>
     );
   }

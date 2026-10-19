@@ -14,6 +14,9 @@ A calm, safe calorie-deficit and macro tracker. React + Vite, deployed on Vercel
 - **Macros** after picking a deficit: Higher protein (30/45/25), Balanced (20/50/30), Lower carb (35/30/35) or custom.
 - **Intuitive eating mode** (Settings): hides all calorie numbers. The day shows as a filling circle with protein/carbs/fat circles, each food shows a small fill dot, and quick add works by portion size.
 - **Barcode scanner** for snacks and ingredients (camera, works on iPhone and Android over https), with product data from [Open Food Facts](https://world.openfoodfacts.org). Unknown barcodes can be added once and are remembered.
+- **Photo estimate**: snap or upload a meal photo, optionally describe it, and get an itemised estimate you can trim and scale (½× to 2×) before logging. Needs `ANTHROPIC_API_KEY`.
+- **Eating out**: describe a restaurant or takeaway order (Taco Bell, McDonald's, mamak…) with an optional photo for an AI estimate that uses chains' published nutrition where known; or use the offline **mixed rice** builder (nasi campur dishes with typical stall portions).
+- **Plan start date** in Settings: progress, start weight and the chart are measured from it.
 - **Kitchen**
   - *On hand*: list ingredients you have (type or scan)
   - *Ideas*: menu suggestions from a built-in recipe library ranked by what you have and what fits your remaining day; optional AI chef (see below)
@@ -40,7 +43,7 @@ The `/api` functions only run on Vercel (or with `npx vercel dev`). Without them
    git push -u origin main
    ```
 2. In Vercel: **Add New → Project → Import** the repo. The framework (Vite) and settings come from `vercel.json`. Click **Deploy**.
-3. Optional AI chef: in the Vercel project, **Settings → Environment Variables**, add `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`, default `claude-haiku-5-5`), then redeploy. The "Ask the AI chef" button appears automatically.
+3. Optional AI features (photo estimates, eating-out estimates, AI chef): in the Vercel project, **Settings → Environment Variables**, add `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`, default `claude-haiku-5-5`), then redeploy. Photo/eating-out estimates and the "Ask the AI chef" button switch on automatically.
 
 Open the Vercel link on your phone and use **Add to Home Screen** to install it.
 
@@ -57,7 +60,7 @@ Each meal is appended as a heading with its ingredient list and an empty "Method
 ## Project layout
 
 ```
-api/                    Vercel functions (cookbook proxy, AI chef)
+api/                    Vercel functions (cookbook proxy, AI chef, photo/restaurant estimates)
 google-apps-script/     Script to paste into your Google Doc
 public/                 Icons and manifest
 scripts/check-calc.ts   Sanity checks for the maths

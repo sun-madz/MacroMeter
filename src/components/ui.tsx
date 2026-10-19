@@ -25,6 +25,9 @@ const paths: Record<string, ReactNode> = {
   calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
   basket: <path d="M3 10h18l-2 10H5zM8 10l3-6M16 10l-3-6" />,
   download: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
+  camera: <><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" /><circle cx="12" cy="13.5" r="3.5" /></>,
+  image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="m21 16-5-5-9 9" /></>,
+  store: <path d="M4 10v10h16V10M3 10l2-6h14l2 6zM3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M10 20v-5h4v5" />,
   upload: <path d="M12 16V5M7 10l5-5 5 5M5 20h14" />,
 };
 

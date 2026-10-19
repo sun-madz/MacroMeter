@@ -3,8 +3,9 @@ import { addDays, macrosFor, todayKey } from '../lib/calc';
 import { MEAL_SLOTS, logsFor, setState, sumNutrition, useStore, type MealSlot } from '../lib/store';
 import { FillCircle, FillDot, Icon, Ring, fullnessPhrase, r0 } from '../components/ui';
 import { GoalCard } from './Progress';
+import type { Tab as AddTab } from './AddFood';
 
-export function Today({ date, setDate, onAdd, goProgress }: { date: string; setDate: (d: string) => void; onAdd: (slot?: MealSlot) => void; goProgress: () => void }) {
+export function Today({ date, setDate, onAdd, goProgress }: { date: string; setDate: (d: string) => void; onAdd: (slot?: MealSlot, tab?: AddTab) => void; goProgress: () => void }) {
   const s = useStore();
   const plan = s.plan!;
   const target = macrosFor(plan.kcal, plan.split);
@@ -96,6 +97,21 @@ export function Today({ date, setDate, onAdd, goProgress }: { date: string; setD
           </div>
         </div>
       )}
+
+      <div className="grid3" style={{ marginTop: 14 }}>
+        {(
+          [
+            ['photo', 'camera', 'Snap a meal'],
+            ['out', 'store', 'Eating out'],
+            ['scan', 'barcode', 'Scan barcode'],
+          ] as [AddTab, string, string][]
+        ).map(([tab, icon, label]) => (
+          <button key={tab} className="card center" style={{ border: 0, padding: '14px 8px', marginTop: 0, fontWeight: 700, fontSize: 13 }} onClick={() => onAdd(undefined, tab)}>
+            <span style={{ color: 'var(--green-strong)' }}><Icon name={icon} size={24} /></span>
+            <div style={{ marginTop: 4 }}>{label}</div>
+          </button>
+        ))}
+      </div>
 
       {MEAL_SLOTS.map((slot) => {
         const items = entries.filter((e) => e.slot === slot.id);

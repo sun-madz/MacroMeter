@@ -4,8 +4,14 @@ import { latestWeight, setState, useStore, type State } from '../lib/store';
 import { Icon, r1, toast } from '../components/ui';
 
 function journey(s: State) {
-  const sorted = [...s.weighIns].sort((a, b) => a.date.localeCompare(b.date));
-  const startKg = sorted.length ? sorted[0].kg : s.plan?.startKg ?? s.profile!.weightKg;
+  const all = [...s.weighIns].sort((a, b) => a.date.localeCompare(b.date));
+  const startDate = s.plan?.startDate ?? (all[0]?.date || todayKey());
+  // Start weight = last weigh-in on/before the start date, else the first one after it.
+  const before = all.filter((w) => w.date <= startDate);
+  const startIn = before.length ? before[before.length - 1] : all[0];
+  const startKg = startIn ? startIn.kg : s.plan?.startKg ?? s.profile!.weightKg;
+  const sorted = all.filter((w) => !startIn || w.date >= startIn.date);
+  const daysIn = Math.max(0, toDay(todayKey()) - toDay(startDate));
   const current = latestWeight(s);
   const goal = s.profile!.goalKg;
   const pct = startKg > goal ? Math.min(1, Math.max(0, (startKg - current) / (startKg - goal))) : 0;
@@ -13,7 +19,7 @@ function journey(s: State) {
   const sim = simulate(profile, s.plan!.kcal, current);
   const slope = trendKgPerDay(sorted);
   const trendDays = slope && slope < 0 && current > goal ? Math.round((current - goal) / -slope) : null;
-  return { sorted, startKg, current, goal, pct, sim, slope, trendDays, done: current <= goal };
+  return { sorted, startKg, startDate, daysIn, current, goal, pct, sim, slope, trendDays, done: current <= goal };
 }
 
 const fmtDate = (d: Date) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -25,7 +31,9 @@ export function GoalCard({ compact, onClick }: { compact?: boolean; onClick?: ()
     <div className="card" onClick={onClick} style={{ cursor: onClick ? 'pointer' : undefined }}>
       <div className="row between">
         <div>
-          <div className="small muted">Progress to goal</div>
+          <div className="small muted">
+            Progress to goal · {j.daysIn < 1 ? 'started today' : j.daysIn < 14 ? `day ${j.daysIn + 1}` : `week ${Math.floor(j.daysIn / 7) + 1}`}
+          </div>
           <div style={{ fontSize: 26, fontWeight: 800 }} className="num">{Math.round(j.pct * 100)}%</div>
         </div>
         <div style={{ textAlign: 'right' }}>

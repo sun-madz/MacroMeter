@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { MACRO_PRESETS, PAL_LEVELS, macrosFor } from '../lib/calc';
+import { MACRO_PRESETS, PAL_LEVELS, macrosFor, todayKey } from '../lib/calc';
 import { cookbookReady, sendToCookbook } from '../lib/cookbook';
 import { getState, replaceState, resetState, setState, useStore, type Settings as S, type State } from '../lib/store';
 import { Icon, Seg, Toggle, r1, toast } from '../components/ui';
@@ -42,6 +42,21 @@ export function Settings({ onEditProfile, onChangePlan }: { onEditProfile: () =>
             <Icon name="right" size={18} />
           </div>
         </div>
+      </div>
+
+      <div className="section-title"><h3>Plan</h3></div>
+      <div className="card stack">
+        <label className="field">
+          Start date
+          <input
+            className="input"
+            type="date"
+            value={plan.startDate}
+            max={todayKey()}
+            onChange={(e) => e.target.value && setState((st) => ({ ...st, plan: { ...st.plan!, startDate: e.target.value } }))}
+          />
+          <span className="hint">When your deficit began. Progress, the chart and your start weight are measured from this date.</span>
+        </label>
       </div>
 
       <div className="section-title"><h3>Tracking</h3></div>

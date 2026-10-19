@@ -16,9 +16,10 @@ import {
   type Nutrition,
 } from '../lib/store';
 import { Scanner as BarcodeScanner } from '../components/Scanner';
+import { EatingOutTab, PhotoTab } from './EstimateTabs';
 import { FillDot, Icon, NumField, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
 
-type Tab = 'search' | 'scan' | 'mine' | 'quick' | 'create';
+export type Tab = 'search' | 'scan' | 'photo' | 'out' | 'mine' | 'quick' | 'create';
 
 interface Props {
   mode: 'log' | 'ingredient';
@@ -72,6 +73,12 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', on
   const tabs: { value: Tab; label: string }[] = [
     { value: 'search', label: 'Search' },
     { value: 'scan', label: 'Scan' },
+    ...(mode === 'log'
+      ? ([
+          { value: 'photo', label: 'Photo' },
+          { value: 'out', label: 'Eating out' },
+        ] as { value: Tab; label: string }[])
+      : []),
     { value: 'mine', label: 'My foods' },
     { value: 'quick', label: mode === 'log' ? 'Quick add' : 'Manual' },
     { value: 'create', label: 'Create' },
@@ -111,6 +118,8 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', on
               }}
             />
           )}
+          {tab === 'photo' && <PhotoTab date={date!} slot={slot} setSlot={setSlot} onDone={onClose} />}
+          {tab === 'out' && <EatingOutTab date={date!} slot={slot} setSlot={setSlot} onDone={onClose} />}
           {tab === 'mine' && <MineTab onPick={setPicked} intuitive={intuitive} target={target} />}
           {tab === 'quick' && (mode === 'log' ? <QuickAdd intuitive={intuitive} target={target} slot={slot} setSlot={setSlot} date={date!} onDone={onClose} /> : <ManualIngredient onAdd={(ing) => { onIngredient?.(ing); onClose(); }} />)}
           {tab === 'create' && (
