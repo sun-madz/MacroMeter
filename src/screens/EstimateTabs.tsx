@@ -60,7 +60,7 @@ function NoAi() {
   return (
     <div className="callout warn small">
       AI estimates aren't switched on yet. Add <b>ANTHROPIC_API_KEY</b> in your Vercel project (Settings → Environment Variables) and redeploy.
-      Until then, use the mixed rice builder, Search, or Quick add.
+      Until then, use Search or Quick add.
     </div>
   );
 }
@@ -236,42 +236,11 @@ export function PhotoTab({ date, slot, setSlot, onDone }: { date: string; slot: 
 }
 
 // ---------- Eating out tab ----------
-interface Dish extends Nutrition {
-  id: string;
-  name: string;
-  unit: string;
+export function EatingOutTab(props: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
+  return <Describe {...props} />;
 }
 
-// Typical Malaysian economy-rice (nasi campur / chap fan) portions. Rough averages per scoop/piece.
-const MIXED_RICE: Dish[] = [
-  { id: 'rice', name: 'White rice', unit: 'plate (~200 g)', kcal: 260, protein: 5, carbs: 57, fat: 0.5 },
-  { id: 'rice-half', name: 'Rice, half portion', unit: '~100 g', kcal: 130, protein: 2.5, carbs: 28, fat: 0.3 },
-  { id: 'fried-chicken', name: 'Fried chicken', unit: 'piece', kcal: 290, protein: 22, carbs: 8, fat: 19 },
-  { id: 'curry-chicken', name: 'Curry chicken', unit: 'piece + gravy', kcal: 250, protein: 20, carbs: 5, fat: 16 },
-  { id: 'sweet-sour', name: 'Sweet & sour chicken', unit: 'scoop', kcal: 260, protein: 15, carbs: 22, fat: 12 },
-  { id: 'rendang', name: 'Beef rendang', unit: 'scoop', kcal: 230, protein: 18, carbs: 6, fat: 15 },
-  { id: 'fried-fish', name: 'Fried fish', unit: 'piece', kcal: 220, protein: 20, carbs: 5, fat: 13 },
-  { id: 'curry-fish', name: 'Curry / asam fish', unit: 'piece + gravy', kcal: 200, protein: 18, carbs: 5, fat: 12 },
-  { id: 'fried-egg', name: 'Fried egg', unit: 'egg', kcal: 110, protein: 6, carbs: 0.5, fat: 9 },
-  { id: 'braised-egg', name: 'Braised / curry egg', unit: 'egg', kcal: 90, protein: 6, carbs: 2, fat: 6 },
-  { id: 'tofu', name: 'Tofu (braised or fried)', unit: 'scoop', kcal: 120, protein: 8, carbs: 4, fat: 8 },
-  { id: 'veg', name: 'Stir-fried vegetables', unit: 'scoop', kcal: 70, protein: 2, carbs: 6, fat: 4.5 },
-  { id: 'taugeh', name: 'Bean sprouts', unit: 'scoop', kcal: 60, protein: 3, carbs: 5, fat: 3 },
-  { id: 'ikan-bilis', name: 'Sambal ikan bilis', unit: 'scoop', kcal: 100, protein: 8, carbs: 4, fat: 6 },
-  { id: 'gravy', name: 'Extra curry gravy / sambal', unit: 'ladle', kcal: 60, protein: 1, carbs: 3, fat: 5 },
-];
-
-export function EatingOutTab({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
-  const [mode, setMode] = useState<'describe' | 'mixed'>('describe');
-  return (
-    <div className="stack">
-      <Seg value={mode} onChange={setMode} options={[{ value: 'describe', label: 'Restaurant / takeaway' }, { value: 'mixed', label: 'Mixed rice' }]} />
-      {mode === 'describe' ? <Describe date={date} slot={slot} setSlot={setSlot} onDone={onDone} /> : <MixedRice date={date} slot={slot} setSlot={setSlot} onDone={onDone} />}
-    </div>
-  );
-}
-
-const PLACES = ['Taco Bell', "McDonald's", 'KFC', 'Subway', 'Mamak', 'Mixed rice stall', 'Starbucks', 'Pizza Hut', 'Nando’s', 'Tealive'];
+const PLACES = ['Taco Bell', "McDonald's", 'KFC', 'Subway', 'Mamak', 'Mixed rice (nasi campur)', 'Starbucks', 'Pizza Hut', 'Nando’s', 'Tealive'];
 
 function Describe({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
   const enabled = useAiEnabled();
@@ -328,60 +297,6 @@ function Describe({ date, slot, setSlot, onDone }: { date: string; slot: MealSlo
       >
         <Icon name="sparkle" size={18} /> {busy ? 'Estimating…' : 'Estimate'}
       </button>
-    </div>
-  );
-}
-
-function MixedRice({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
-  const s = useStore();
-  const intuitive = s.settings.intuitive;
-  const target = s.plan?.kcal ?? 2000;
-  const [qty, setQty] = useState<Record<string, number>>({ rice: 1 });
-  const picked = MIXED_RICE.filter((d) => qty[d.id]);
-  const total = sumNutrition(picked.map((d) => ({ kcal: d.kcal * qty[d.id], protein: d.protein * qty[d.id], carbs: d.carbs * qty[d.id], fat: d.fat * qty[d.id] })));
-  const change = (id: string, delta: number) => setQty((q) => ({ ...q, [id]: Math.max(0, (q[id] ?? 0) + delta) }));
-
-  return (
-    <div className="stack">
-      <p className="small muted" style={{ margin: 0 }}>Tap what's on your plate. Works offline, using typical stall portions.</p>
-      <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
-        <div className="list">
-          {MIXED_RICE.map((d) => (
-            <div key={d.id} className="list-item">
-              <div className="grow">
-                <div className="title">{d.name}</div>
-                <div className="small muted">{d.unit}{intuitive ? '' : ` · ${d.kcal} kcal`}</div>
-              </div>
-              {qty[d.id] ? (
-                <>
-                  <button className="icon-btn sm" onClick={() => change(d.id, -1)} aria-label={`Less ${d.name}`}><Icon name="minus" size={16} /></button>
-                  <span className="num" style={{ fontWeight: 800, minWidth: 16, textAlign: 'center' }}>{qty[d.id]}</span>
-                </>
-              ) : null}
-              <button className="icon-btn sm" onClick={() => change(d.id, 1)} aria-label={`Add ${d.name}`}><Icon name="plus" size={16} /></button>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="card row" style={{ position: 'sticky', bottom: 0 }}>
-        {intuitive ? <FillDot fraction={total.kcal / target} size={40} /> : <div className="grow"><b className="num" style={{ fontSize: 20 }}>{r0(total.kcal)} kcal</b><div className="tiny muted num">P {r0(total.protein)} · C {r0(total.carbs)} · F {r0(total.fat)}</div></div>}
-        {intuitive && <div className="grow"><b>{portionWord(total.kcal / target)}</b></div>}
-        <select className="input" style={{ width: 120, minHeight: 40, padding: '6px 10px' }} value={slot} onChange={(e) => setSlot(e.target.value as MealSlot)}>
-          {MEAL_SLOTS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-        <button
-          className="btn sm"
-          disabled={!picked.length}
-          onClick={() => {
-            const name = 'Mixed rice: ' + picked.map((d) => (qty[d.id] > 1 ? `${qty[d.id]}× ` : '') + d.name.toLowerCase()).join(', ');
-            addLog({ date, slot, name, amount: 'stall estimate', ...total });
-            toast('Logged mixed rice');
-            onDone();
-          }}
-        >
-          Log
-        </button>
-      </div>
     </div>
   );
 }
