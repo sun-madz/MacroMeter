@@ -17,6 +17,7 @@ import {
 } from '../lib/store';
 import { Scanner as BarcodeScanner } from '../components/Scanner';
 import { EatingOutTab, Estimating, PhotoTab, resizeImage } from './EstimateTabs';
+import { MixBuilder } from './MixBuilder';
 import { FillDot, Icon, NumField, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
 
 export type Tab = 'search' | 'scan' | 'photo' | 'out' | 'mine' | 'quick' | 'create';
@@ -123,8 +124,10 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', on
           {tab === 'mine' && <MineTab onPick={setPicked} intuitive={intuitive} target={target} />}
           {tab === 'quick' && (mode === 'log' ? <QuickAdd intuitive={intuitive} target={target} slot={slot} setSlot={setSlot} date={date!} onDone={onClose} /> : <ManualIngredient onAdd={(ing) => { onIngredient?.(ing); onClose(); }} />)}
           {tab === 'create' && (
-            <CreateFood
+            <CreateTab
+              mode={mode}
               barcode={pendingBarcode}
+              onMix={(meal) => setPicked(mealToFood(meal))}
               onCreated={(f) => {
                 setState((st) => ({ ...st, foods: [f, ...st.foods] }));
                 setPicked(f);
@@ -556,6 +559,19 @@ function ManualIngredient({ onAdd }: { onAdd: (i: Ingredient) => void }) {
       <button className="btn block" disabled={!name.trim()} onClick={() => onAdd({ id: uid(), name: name.trim(), amount: amount.trim(), kcal: +kcal || 0, protein: +p || 0, carbs: +c || 0, fat: +f || 0 })}>
         Add to meal
       </button>
+    </div>
+  );
+}
+
+function CreateTab({ mode, barcode, onMix, onCreated }: { mode: 'log' | 'ingredient'; barcode?: string; onMix: (m: Meal) => void; onCreated: (f: Food) => void }) {
+  // A scanned-but-unknown barcode goes straight to the label form.
+  const [kind, setKind] = useState<'mix' | 'label'>(mode === 'log' && !barcode ? 'mix' : 'label');
+  return (
+    <div className="stack">
+      {mode === 'log' && (
+        <Seg value={kind} onChange={setKind} options={[{ value: 'mix', label: 'Something I made' }, { value: 'label', label: 'From a label' }]} />
+      )}
+      {kind === 'mix' ? <MixBuilder onSaved={onMix} /> : <CreateFood barcode={barcode} onCreated={onCreated} />}
     </div>
   );
 }

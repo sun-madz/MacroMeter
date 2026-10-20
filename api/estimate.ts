@@ -74,7 +74,8 @@ interface EstimateRequest {
   image?: string; // data URL (image/jpeg|png|webp)
   description?: string;
   restaurant?: string;
-  kind?: 'photo' | 'restaurant' | 'package';
+  kind?: 'photo' | 'restaurant' | 'package' | 'recipe';
+  ingredients?: { name: string; qty: number; unit: string }[];
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -86,6 +87,8 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return json({ error: 'Invalid request' }, 400);
   }
+  if (body.kind === 'recipe') return recipe(body);
+
   const description = (body.description || '').slice(0, 600).trim();
   const restaurant = (body.restaurant || '').slice(0, 120).trim();
   if (!body.image && !description) return json({ error: 'Add a photo or describe what you ate.' }, 400);
@@ -137,6 +140,46 @@ export async function POST(request: Request): Promise<Response> {
     return json({ name: String(parsed.name || 'Meal'), items, confidence: parsed.confidence || 'medium', note: parsed.note || '' });
   } catch {
     return json({ error: 'Could not read the estimate, please try again.' }, 502);
+  }
+}
+
+/** Nutrition for each ingredient of something the user made (smoothie, shake, bowl...). */
+async function recipe(body: EstimateRequest): Promise<Response> {
+  const list = (body.ingredients || [])
+    .filter((i) => i && String(i.name || '').trim())
+    .slice(0, 40)
+    .map((i) => ({ name: String(i.name).trim().slice(0, 80), qty: Number(i.qty) || 1, unit: String(i.unit || 'piece').slice(0, 12) }));
+  if (!list.length) return json({ error: 'Add at least one ingredient.' }, 400);
+  const dish = String(body.description || '').slice(0, 120).trim();
+
+  const prompt = [
+    `The user made${dish ? ` "${dish}"` : ' something'} from these ingredients (quantity, unit, ingredient):`,
+    ...list.map((i, n) => `${n + 1}. ${i.qty} ${i.unit} ${i.name}`),
+    'Give the nutrition for EXACTLY the stated quantity of each ingredient, in the same order, one item per ingredient.',
+    'Use standard reference values (USDA-style). Convert volume units sensibly for that ingredient (e.g. 1 tbsp peanut butter ≈ 16 g, 1 cup milk = 244 g, 1 tsp honey ≈ 7 g, 1 scoop whey ≈ 30 g unless a brand says otherwise).',
+    'If a brand is named, use that product\'s typical label values. Ice and water are 0.',
+    'Reply with JSON only, in exactly this shape (numbers without units):',
+    '{"name":"short name for the result","items":[{"name":"ingredient","amount":"the quantity and unit as given","grams":0,"kcal":0,"protein":0,"carbs":0,"fat":0}],"confidence":"low|medium|high","note":"one short sentence on any assumption"}',
+  ].join('\n');
+
+  let text: string;
+  try {
+    text = await askAi(prompt, undefined, 1500);
+  } catch (e) {
+    return json({ error: (e as Error).message }, e instanceof AiError ? e.status : 502);
+  }
+  try {
+    const p = parseJson(text);
+    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const raw: Record<string, unknown>[] = Array.isArray(p.items) ? p.items : [];
+    // Keep the user's own names and amounts; take numbers from the model by position.
+    const items = list.map((ing, i) => {
+      const r = raw[i] ?? {};
+      return { name: ing.name, amount: `${ing.qty} ${ing.unit}`, grams: n(r.grams) || undefined, kcal: n(r.kcal), protein: n(r.protein), carbs: n(r.carbs), fat: n(r.fat) };
+    });
+    return json({ name: dish || String(p.name || 'My mix'), items, confidence: p.confidence || 'medium', note: p.note ? String(p.note).slice(0, 200) : '' });
+  } catch {
+    return json({ error: 'Could not work that out, please try again.' }, 502);
   }
 }
 

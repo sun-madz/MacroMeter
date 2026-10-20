@@ -15,7 +15,7 @@ export interface Estimate {
 
 // ---------- shared helpers ----------
 let aiStatus: Promise<boolean> | null = null;
-function useAiEnabled() {
+export function useAiEnabled() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   useEffect(() => {
     aiStatus ??= fetch('/api/estimate')
@@ -27,7 +27,7 @@ function useAiEnabled() {
   return enabled;
 }
 
-async function requestEstimate(body: { image?: string; description?: string; restaurant?: string; kind: string }, signal?: AbortSignal): Promise<Estimate> {
+async function requestEstimate(body: { image?: string; description?: string; restaurant?: string; kind: string; ingredients?: { name: string; qty: number; unit: string }[] }, signal?: AbortSignal): Promise<Estimate> {
   const res = await fetch('/api/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || `Estimate failed (${res.status})`);
@@ -56,7 +56,7 @@ export function resizeImage(file: File, max = 1024): Promise<string> {
   });
 }
 
-function NoAi() {
+export function NoAi() {
   return (
     <div className="callout warn small">
       AI estimates aren't switched on yet. Add <b>GEMINI_API_KEY</b> (free from Google AI Studio) in your Vercel project (Settings → Environment Variables) and redeploy.
@@ -66,7 +66,7 @@ function NoAi() {
 }
 
 // ---------- running an estimate (cancellable) ----------
-function useEstimateRun(onResult: (e: Estimate) => void) {
+export function useEstimateRun(onResult: (e: Estimate) => void) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const ctrl = useRef<AbortController | null>(null);
