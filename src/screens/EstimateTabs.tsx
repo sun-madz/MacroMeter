@@ -35,7 +35,7 @@ async function requestEstimate(body: { image?: string; description?: string; res
 }
 
 /** Shrinks a photo to max 1024 px JPEG so uploads are small and fast. */
-function resizeImage(file: File, max = 1024): Promise<string> {
+export function resizeImage(file: File, max = 1024): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();

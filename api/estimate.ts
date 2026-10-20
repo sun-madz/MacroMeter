@@ -74,7 +74,7 @@ interface EstimateRequest {
   image?: string; // data URL (image/jpeg|png|webp)
   description?: string;
   restaurant?: string;
-  kind?: 'photo' | 'restaurant';
+  kind?: 'photo' | 'restaurant' | 'package';
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -96,6 +96,11 @@ export async function POST(request: Request): Promise<Response> {
     if (!m) return json({ error: 'Unsupported image' }, 400);
     if (m[2].length > 5_000_000) return json({ error: 'Image too large' }, 413);
     image = { mime: m[1], data: m[2] };
+  }
+
+  if (body.kind === 'package') {
+    if (!image) return json({ error: 'Take a photo of the packaging first.' }, 400);
+    return readPackage(image, description);
   }
 
   const prompt = [
@@ -132,6 +137,55 @@ export async function POST(request: Request): Promise<Response> {
     return json({ name: String(parsed.name || 'Meal'), items, confidence: parsed.confidence || 'medium', note: parsed.note || '' });
   } catch {
     return json({ error: 'Could not read the estimate, please try again.' }, 502);
+  }
+}
+
+/** Reads a product's packaging (nutrition label, name, brand, barcode digits) from a photo. */
+async function readPackage(image: { mime: string; data: string }, note: string): Promise<Response> {
+  const prompt = [
+    'This is a photo of food or drink packaging. Identify the product and its nutrition.',
+    note ? `User note: ${note}` : '',
+    '1. Read the product name and brand from the pack.',
+    '2. If a nutrition facts / nutrition information table is visible, copy its numbers exactly. Prefer the per-100 g (or per-100 ml) column; if only per-serving is shown, use that.',
+    '3. Read the serving size in grams/ml if printed.',
+    '4. If barcode digits are printed under a barcode, copy them exactly (digits only).',
+    '5. If no nutrition table is visible, estimate typical values for this exact product (or the closest common equivalent) per 100 g and set "source":"estimated".',
+    'Energy must be kcal (convert kJ ÷ 4.184 if only kJ is shown).',
+    'Reply with JSON only, in exactly this shape (numbers without units):',
+    '{"name":"","brand":"","barcode":"","per":"100g|serving","servingG":0,"servingLabel":"e.g. 1 bar (40 g)","kcal":0,"protein":0,"carbs":0,"fat":0,"source":"label|estimated","note":"one short sentence"}',
+    'If the photo is not of a food or drink product, reply {"error":"Couldn\'t see a food package in the photo"}.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  let text: string;
+  try {
+    text = await askAi(prompt, image, 800);
+  } catch (e) {
+    return json({ error: (e as Error).message }, e instanceof AiError ? e.status : 502);
+  }
+  try {
+    const p = parseJson(text);
+    if (p.error) return json({ error: String(p.error) }, 422);
+    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const barcode = String(p.barcode ?? '').replace(/\D/g, '');
+    const product = {
+      name: String(p.name || 'Packaged food').slice(0, 120),
+      brand: p.brand ? String(p.brand).slice(0, 80) : undefined,
+      barcode: barcode.length >= 8 ? barcode : undefined,
+      per: p.per === 'serving' ? 'serving' : '100g',
+      servingG: n(p.servingG) || undefined,
+      servingLabel: p.servingLabel ? String(p.servingLabel).slice(0, 60) : undefined,
+      kcal: n(p.kcal),
+      protein: n(p.protein),
+      carbs: n(p.carbs),
+      fat: n(p.fat),
+      source: p.source === 'label' ? 'label' : 'estimated',
+      note: p.note ? String(p.note).slice(0, 200) : '',
+    };
+    if (!product.kcal && !product.protein && !product.carbs && !product.fat) return json({ error: "Couldn't read the nutrition. Try a clearer photo of the label." }, 422);
+    return json({ product });
+  } catch {
+    return json({ error: 'Could not read the package, please try again.' }, 502);
   }
 }
 

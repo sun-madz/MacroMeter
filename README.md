@@ -14,6 +14,7 @@ A calm, safe calorie-deficit and macro tracker. React + Vite, deployed on Vercel
 - **Macros** after picking a deficit: Higher protein (30/45/25), Balanced (20/50/30), Lower carb (35/30/35) or custom.
 - **Intuitive eating mode** (Settings): hides all calorie numbers. The day shows as a filling circle with protein/carbs/fat circles, each food shows a small fill dot, and quick add works by portion size.
 - **Barcode scanner** for snacks and ingredients (camera, works on iPhone and Android over https), with product data from [Open Food Facts](https://world.openfoodfacts.org). Unknown barcodes can be added once and are remembered.
+- **Scan package**: snap any part of a pack. A barcode in the photo is looked up first; otherwise the nutrition label (name, brand, per-100 g values, serving size) is read with AI. Needs an AI key for label reading.
 - **Photo estimate**: snap or upload a meal photo, optionally describe it, and get an itemised estimate you can trim and scale (½× to 2×) before logging. Needs an AI key (see Deploy).
 - **Eating out**: describe a restaurant or takeaway order (Taco Bell, McDonald's, mamak…) including mixed rice stalls, with an optional photo for an AI estimate that uses chains' published nutrition where known.
 - **Plan start date** in Settings: progress, start weight and the chart are measured from it.

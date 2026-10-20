@@ -16,7 +16,7 @@ import {
   type Nutrition,
 } from '../lib/store';
 import { Scanner as BarcodeScanner } from '../components/Scanner';
-import { EatingOutTab, PhotoTab } from './EstimateTabs';
+import { EatingOutTab, Estimating, PhotoTab, resizeImage } from './EstimateTabs';
 import { FillDot, Icon, NumField, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
 
 export type Tab = 'search' | 'scan' | 'photo' | 'out' | 'mine' | 'quick' | 'create';
@@ -222,6 +222,16 @@ function SearchTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; i
 }
 
 function ScanTab({ onFound, onMissing }: { onFound: (f: Food) => void; onMissing: (code: string) => void }) {
+  const [mode, setMode] = useState<'live' | 'package'>('live');
+  return (
+    <div className="stack">
+      <Seg value={mode} onChange={setMode} options={[{ value: 'live', label: 'Barcode' }, { value: 'package', label: 'Package photo' }]} />
+      {mode === 'live' ? <LiveBarcode onFound={onFound} onMissing={onMissing} /> : <PackagePhoto onFound={onFound} />}
+    </div>
+  );
+}
+
+function LiveBarcode({ onFound, onMissing }: { onFound: (f: Food) => void; onMissing: (code: string) => void }) {
   const s = useStore();
   const [status, setStatus] = useState<'scanning' | 'looking' | 'error'>('scanning');
   const [msg, setMsg] = useState('');
@@ -252,7 +262,114 @@ function ScanTab({ onFound, onMissing }: { onFound: (f: Food) => void; onMissing
   return (
     <div className="stack">
       <BarcodeScanner key={key} onDetect={handle} />
-      <p className="hint center" style={{ margin: 0 }}>Point at the barcode on the pack. Products come from Open Food Facts.</p>
+      <p className="hint center" style={{ margin: 0 }}>Point at the barcode on the pack. No barcode? Use Package photo.</p>
+    </div>
+  );
+}
+
+const PACKAGE_MSGS = ['Looking for a barcode…', 'Reading the label…', 'Finding the nutrition table…', 'Checking serving size…', 'Almost there…'];
+
+/** Photo of any packaging: uses a barcode if one is visible, otherwise reads the label with AI. */
+function PackagePhoto({ onFound }: { onFound: (f: Food) => void }) {
+  const s = useStore();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [preview, setPreview] = useState<string | null>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const library = useRef<HTMLInputElement>(null);
+  const cancelled = useRef(false);
+
+  const handle = async (file?: File) => {
+    if (!file) return;
+    cancelled.current = false;
+    setErr('');
+    setBusy(true);
+    try {
+      const image = await resizeImage(file, 1600);
+      setPreview(image);
+
+      // 1. A barcode in the photo is the most accurate route.
+      const { barcodeFromFile } = await import('../lib/imageBarcode');
+      const code = await barcodeFromFile(file);
+      if (cancelled.current) return;
+      if (code) {
+        const known = s.foods.find((f) => f.barcode === code);
+        if (known) return onFound(known);
+        const f = await lookupBarcode(code).catch(() => null);
+        if (cancelled.current) return;
+        if (f) {
+          toast('Found by barcode');
+          return onFound(f);
+        }
+      }
+
+      // 2. Otherwise read the packaging with AI.
+      const res = await fetch('/api/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'package', image }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (cancelled.current) return;
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 503)
+          throw new Error(code ? `Barcode ${code} isn't in the database, and AI label reading isn't set up (add GEMINI_API_KEY in Vercel).` : "No barcode found, and AI label reading isn't set up (add GEMINI_API_KEY in Vercel).");
+        throw new Error(d.error || `Couldn't read the package (${res.status})`);
+      }
+      const p = d.product;
+      const food: Food = {
+        id: `pkg-${uid()}`,
+        name: p.name,
+        brand: p.brand,
+        barcode: p.barcode || code || undefined,
+        per: p.per,
+        servingG: p.servingG,
+        servingLabel: p.servingLabel,
+        kcal: p.kcal,
+        protein: p.protein,
+        carbs: p.carbs,
+        fat: p.fat,
+        source: 'custom',
+      };
+      toast(p.source === 'label' ? 'Read from the nutrition label' : 'No label visible, values are estimated');
+      onFound(food);
+    } catch (e) {
+      if (!cancelled.current) setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (busy)
+    return (
+      <Estimating
+        messages={PACKAGE_MSGS}
+        onCancel={() => {
+          cancelled.current = true;
+          setBusy(false);
+        }}
+      />
+    );
+
+  return (
+    <div className="stack">
+      <div className="grid2">
+        <button className="card center" style={{ border: 0, padding: 22 }} onClick={() => camera.current?.click()}>
+          <Icon name="camera" size={30} />
+          <div style={{ fontWeight: 700, marginTop: 6 }}>Take photo</div>
+        </button>
+        <button className="card center" style={{ border: 0, padding: 22, marginTop: 0 }} onClick={() => library.current?.click()}>
+          <Icon name="image" size={30} />
+          <div style={{ fontWeight: 700, marginTop: 6 }}>From gallery</div>
+        </button>
+      </div>
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { handle(e.target.files?.[0]); e.target.value = ''; }} />
+      <input ref={library} type="file" accept="image/*" hidden onChange={(e) => { handle(e.target.files?.[0]); e.target.value = ''; }} />
+      {preview && err && <img src={preview} alt="" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', borderRadius: 16 }} />}
+      {err && <div className="callout warn small">{err}</div>}
+      <p className="hint" style={{ margin: 0 }}>
+        Snap the front, back or nutrition label. If a barcode is in the shot it's used first; otherwise the label is read for you. The nutrition table gives the most accurate result.
+      </p>
     </div>
   );
 }
