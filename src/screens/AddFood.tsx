@@ -47,7 +47,7 @@ export function mealToFood(m: Meal): Food {
   };
 }
 
-export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', onClose, onIngredient }: Props) {
+export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', onClose, onIngredient }: Props) {
   const s = useStore();
   const [tab, setTab] = useState<Tab>(startTab);
   const [picked, setPicked] = useState<Food | null>(null);
@@ -72,6 +72,7 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', on
   };
 
   const tabs: { value: Tab; label: string }[] = [
+    { value: 'create', label: 'Create' },
     { value: 'search', label: 'Search' },
     { value: 'scan', label: 'Scan' },
     ...(mode === 'log'
@@ -81,8 +82,7 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', on
         ] as { value: Tab; label: string }[])
       : []),
     { value: 'mine', label: 'My foods' },
-    { value: 'quick', label: mode === 'log' ? 'Quick add' : 'Manual' },
-    { value: 'create', label: 'Create' },
+    ...(mode === 'ingredient' ? ([{ value: 'quick', label: 'Manual' }] as { value: Tab; label: string }[]) : []),
   ];
 
   return (
@@ -122,7 +122,7 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'search', on
           {tab === 'photo' && <PhotoTab date={date!} slot={slot} setSlot={setSlot} onDone={onClose} />}
           {tab === 'out' && <EatingOutTab date={date!} slot={slot} setSlot={setSlot} onDone={onClose} />}
           {tab === 'mine' && <MineTab onPick={setPicked} intuitive={intuitive} target={target} />}
-          {tab === 'quick' && (mode === 'log' ? <QuickAdd intuitive={intuitive} target={target} slot={slot} setSlot={setSlot} date={date!} onDone={onClose} /> : <ManualIngredient onAdd={(ing) => { onIngredient?.(ing); onClose(); }} />)}
+          {tab === 'quick' && mode === 'ingredient' && <ManualIngredient onAdd={(ing) => { onIngredient?.(ing); onClose(); }} />}
           {tab === 'create' && (
             <CreateTab
               mode={mode}
@@ -465,74 +465,6 @@ function AmountPicker({ food, target, intuitive, mode, slot, setSlot, onConfirm 
 
       <button className="btn block" disabled={q <= 0} onClick={() => onConfirm(food, n, amount, grams)}>
         {mode === 'log' ? `Add to ${MEAL_SLOTS.find((m) => m.id === slot)!.label.toLowerCase()}` : 'Add to meal'}
-      </button>
-    </div>
-  );
-}
-
-const SIZES = [
-  { label: 'A few bites', f: 0.05 },
-  { label: 'Small snack', f: 0.1 },
-  { label: 'Light meal', f: 0.2 },
-  { label: 'Regular meal', f: 0.3 },
-  { label: 'Big meal', f: 0.4 },
-];
-
-function QuickAdd({ intuitive, target, slot, setSlot, date, onDone }: { intuitive: boolean; target: number; slot: MealSlot; setSlot: (s: MealSlot) => void; date: string; onDone: () => void }) {
-  const s = useStore();
-  const [name, setName] = useState('');
-  const [kcal, setKcal] = useState('');
-  const [p, setP] = useState('');
-  const [c, setC] = useState('');
-  const [f, setF] = useState('');
-  const split = s.plan?.split ?? { p: 30, c: 45, f: 25 };
-
-  if (intuitive) {
-    return (
-      <div className="stack">
-        <p className="muted small" style={{ margin: 0 }}>Ate something you can't look up? Pick roughly how big it was.</p>
-        <input className="input" placeholder="What was it? (optional)" value={name} onChange={(e) => setName(e.target.value)} />
-        <Seg value={slot} onChange={setSlot} options={MEAL_SLOTS.map((m) => ({ value: m.id, label: m.label }))} />
-        {SIZES.map((sz) => (
-          <button
-            key={sz.label}
-            className="choice"
-            onClick={() => {
-              const k = target * sz.f;
-              addLog({ date, slot, name: name.trim() || sz.label, amount: sz.label.toLowerCase(), kcal: k, protein: (k * split.p) / 400, carbs: (k * split.c) / 400, fat: (k * split.f) / 900 });
-              toast('Logged');
-              onDone();
-            }}
-          >
-            <FillDot fraction={sz.f} />
-            <h3 className="grow">{sz.label}</h3>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  const k = parseFloat(kcal) || 0;
-  return (
-    <div className="stack">
-      <input className="input" placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
-      <NumField label="Calories" value={kcal} onChange={setKcal} suffix="kcal" />
-      <div className="grid3">
-        <NumField label="Protein" value={p} onChange={setP} suffix="g" />
-        <NumField label="Carbs" value={c} onChange={setC} suffix="g" />
-        <NumField label="Fat" value={f} onChange={setF} suffix="g" />
-      </div>
-      <Seg value={slot} onChange={setSlot} options={MEAL_SLOTS.map((m) => ({ value: m.id, label: m.label }))} />
-      <button
-        className="btn block"
-        disabled={k <= 0}
-        onClick={() => {
-          addLog({ date, slot, name: name.trim() || 'Quick add', amount: '', kcal: k, protein: parseFloat(p) || 0, carbs: parseFloat(c) || 0, fat: parseFloat(f) || 0 });
-          toast('Logged');
-          onDone();
-        }}
-      >
-        Log it
       </button>
     </div>
   );
