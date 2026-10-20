@@ -3,7 +3,19 @@ import { setState, sumNutrition, uid, useStore, type Meal } from '../lib/store';
 import { FillDot, Icon, portionWord, r0, toast } from '../components/ui';
 import { Estimating, NoAi, useAiEnabled, useEstimateRun, type Estimate } from './EstimateTabs';
 
-const UNITS = ['g', 'ml', 'tsp', 'tbsp', 'cup', 'oz', 'piece', 'scoop', 'slice', 'handful', 'pinch'];
+const UNITS: { value: string; label: string }[] = [
+  { value: 'piece', label: 'pcs' },
+  { value: 'slice', label: 'slice' },
+  { value: 'g', label: 'g' },
+  { value: 'ml', label: 'ml' },
+  { value: 'tsp', label: 'tsp' },
+  { value: 'tbsp', label: 'tbsp' },
+  { value: 'cup', label: 'cup' },
+  { value: 'scoop', label: 'scoop' },
+  { value: 'oz', label: 'oz' },
+  { value: 'handful', label: 'handful' },
+  { value: 'pinch', label: 'pinch' },
+];
 
 const SUGGESTIONS = [
   'Banana', 'Frozen berries', 'Mango', 'Strawberries', 'Dates', 'Full cream milk', 'Low fat milk', 'Almond milk', 'Oat milk', 'Soy milk',
@@ -11,15 +23,21 @@ const SUGGESTIONS = [
   'Chia seeds', 'Flax seeds', 'Spinach', 'Avocado', 'Vanilla ice cream', 'Ice', 'Coffee', 'Condensed milk', 'Milo', 'Sugar',
 ];
 
-/** Sensible default unit for a typed ingredient. */
+/** Sensible default unit for a typed ingredient (checked in order, whole words only). */
 function guessUnit(name: string): string | null {
-  const n = name.toLowerCase();
-  if (/milk|juice|water|coffee|tea|syrup(?!.*maple)|coconut water/.test(n) && !/powder|condensed/.test(n)) return 'ml';
-  if (/butter|honey|maple|condensed|cocoa|milo|sugar|chia|flax|seed|oil/.test(n)) return 'tbsp';
-  if (/protein|whey|collagen/.test(n)) return 'scoop';
-  if (/banana|apple|date|egg|orange/.test(n)) return 'piece';
-  if (/spinach|kale|ice\b|^ice/.test(n)) return 'handful';
-  if (/oat|yogurt|yoghurt|berr|mango|strawberr|ice cream|avocado/.test(n)) return 'g';
+  const n = ` ${name.toLowerCase()} `;
+  const has = (words: string) => new RegExp(`\\b(${words})`).test(n);
+  // Things you count
+  if (has('slice|toast')) return 'slice';
+  if (has('egg|banana|apple|orange|date|tortilla|wrap|bun|bagel|muffin|roti|paratha|chapati|naan|pita|croissant|sausage|nugget|tomato|onion')) return 'piece';
+  if (has('bread|cheese')) return 'slice';
+  // Spoons
+  if (has('peanut butter|almond butter|butter|honey|maple|condensed|cocoa|milo|sugar|chia|flax|seeds?|oil|mayo|mayonnaise|ketchup|sauce|jam|nutella|salt|pepper|cinnamon|ashwagandha|powder|spread')) return 'tbsp';
+  if (has('protein|whey|collagen')) return 'scoop';
+  // Liquids
+  if (has('milk|juice|water|coffee|tea|coconut water|smoothie|yogurt drink|kefir')) return 'ml';
+  if (has('spinach|kale|lettuce|ice')) return 'handful';
+  if (has('oat|yogurt|yoghurt|berr|mango|strawberr|ice cream|avocado|rice|chicken|beef|tuna|salmon|tofu|pasta|noodle')) return 'g';
   return null;
 }
 
@@ -172,7 +190,7 @@ export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
               aria-label="Amount"
             />
             <select className="input" value={r.unit} onChange={(e) => update(r.id, { unit: e.target.value, unitTouched: true })} style={{ padding: '12px 8px' }} aria-label="Unit">
-              {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              {UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
             </select>
             <button className="icon-btn sm plain" aria-label="Remove ingredient" onClick={() => setRows(rows.length > 1 ? rows.filter((x) => x.id !== r.id) : [blankRow()])}>
               <Icon name="x" size={18} />
@@ -185,7 +203,10 @@ export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
       </button>
 
       <div className="row">
-        <span className="grow" style={{ fontWeight: 600, fontSize: 14 }}>How many servings does it make?</span>
+        <div className="grow">
+          <div style={{ fontWeight: 600, fontSize: 14 }}>Makes how many portions?</div>
+          <div className="hint">Leave at 1 if it's all for you. Use 2+ if you're sharing or saving some.</div>
+        </div>
         <button className="icon-btn sm" onClick={() => setServings(Math.max(1, servings - 1))} aria-label="Fewer servings"><Icon name="minus" size={18} /></button>
         <span className="num" style={{ fontWeight: 800, minWidth: 22, textAlign: 'center' }}>{servings}</span>
         <button className="icon-btn sm" onClick={() => setServings(servings + 1)} aria-label="More servings"><Icon name="plus" size={18} /></button>
