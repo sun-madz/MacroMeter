@@ -54,8 +54,11 @@ export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
   const setRows = (v: Row[]) => { draft = { ...draft, rows: v }; setRowsRaw(v); setEst(null); };
   const update = (id: string, patch: Partial<Row>) => setRows(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
-  const filled = rows.filter((r) => r.name.trim() && parseFloat(r.qty) > 0);
-  const missingQty = rows.some((r) => r.name.trim() && !(parseFloat(r.qty) > 0));
+  // An empty amount means 1 (that's what the placeholder shows).
+  const qtyOf = (r: Row) => (r.qty.trim() === '' ? 1 : parseFloat(r.qty));
+  const badQty = (r: Row) => !!r.name.trim() && !(qtyOf(r) > 0);
+  const filled = rows.filter((r) => r.name.trim() && qtyOf(r) > 0);
+  const missingQty = rows.some(badQty);
 
   if (busy) return <Estimating messages={MSGS} onCancel={cancel} />;
 
@@ -165,7 +168,7 @@ export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
               placeholder="1"
               value={r.qty}
               onChange={(e) => update(r.id, { qty: e.target.value })}
-              style={{ padding: '12px 6px' }}
+              style={{ padding: '12px 6px', borderColor: badQty(r) ? 'var(--red)' : undefined }}
               aria-label="Amount"
             />
             <select className="input" value={r.unit} onChange={(e) => update(r.id, { unit: e.target.value, unitTouched: true })} style={{ padding: '12px 8px' }} aria-label="Unit">
@@ -188,12 +191,13 @@ export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
         <button className="icon-btn sm" onClick={() => setServings(servings + 1)} aria-label="More servings"><Icon name="plus" size={18} /></button>
       </div>
 
-      {missingQty && <div className="hint">Add an amount for every ingredient.</div>}
+      {missingQty && <div className="error">The amount in the red box needs to be more than 0.</div>}
+      {!filled.length && <div className="hint">Add at least one ingredient to work out the nutrition.</div>}
       {err && <div className="error">{err}</div>}
       <button
         className="btn block"
         disabled={enabled === false || !filled.length || missingQty}
-        onClick={() => run({ kind: 'recipe', description: name, ingredients: filled.map((r) => ({ name: r.name.trim(), qty: parseFloat(r.qty), unit: r.unit })) })}
+        onClick={() => run({ kind: 'recipe', description: name, ingredients: filled.map((r) => ({ name: r.name.trim(), qty: qtyOf(r), unit: r.unit })) })}
       >
         <Icon name="sparkle" size={18} /> Work out nutrition
       </button>
