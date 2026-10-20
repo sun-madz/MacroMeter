@@ -18,11 +18,13 @@ class AiError extends Error {
 }
 
 /** Sends a prompt (plus optional base64 image) and returns the model's text reply. */
-async function askAi(prompt: string, image?: { mime: string; data: string }, maxTokens = 1500): Promise<string> {
+type Img = { mime: string; data: string };
+async function askAi(prompt: string, image?: Img | Img[], maxTokens = 1500): Promise<string> {
+  const images = image ? (Array.isArray(image) ? image : [image]) : [];
   const gemini = process.env.GEMINI_API_KEY;
   if (gemini) {
     const parts: unknown[] = [];
-    if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.data } });
+    for (const im of images) parts.push({ inline_data: { mime_type: im.mime, data: im.data } });
     parts.push({ text: prompt });
     let last = '';
     for (const model of GEMINI_MODELS()) {
@@ -50,7 +52,7 @@ async function askAi(prompt: string, image?: { mime: string; data: string }, max
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new AiError('AI is not set up. Add GEMINI_API_KEY (free) or ANTHROPIC_API_KEY in Vercel.', 503);
   const content: unknown[] = [];
-  if (image) content.push({ type: 'image', source: { type: 'base64', media_type: image.mime, data: image.data } });
+  for (const im of images) content.push({ type: 'image', source: { type: 'base64', media_type: im.mime, data: im.data } });
   content.push({ type: 'text', text: prompt });
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -76,6 +78,7 @@ interface EstimateRequest {
   restaurant?: string;
   kind?: 'photo' | 'restaurant' | 'package' | 'recipe';
   ingredients?: { name: string; qty: number; unit: string }[];
+  images?: string[]; // data URLs, used by 'recipe'
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -143,40 +146,69 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-/** Nutrition for each ingredient of something the user made (smoothie, shake, bowl...). */
+/** Nutrition for each ingredient of something the user made (smoothie, shake, sandwich...).
+ *  Optional photos (packs, nutrition labels, the finished dish) let the model read labels and judge portions;
+ *  with photos and no ingredient list, it works out the ingredients itself. */
 async function recipe(body: EstimateRequest): Promise<Response> {
   const list = (body.ingredients || [])
     .filter((i) => i && String(i.name || '').trim())
     .slice(0, 40)
     .map((i) => ({ name: String(i.name).trim().slice(0, 80), qty: Number(i.qty) || 1, unit: String(i.unit || 'piece').slice(0, 12) }));
-  if (!list.length) return json({ error: 'Add at least one ingredient.' }, 400);
+  const images: Img[] = [];
+  for (const url of (body.images || []).slice(0, 4)) {
+    const m = /^data:(image\/(?:jpeg|png|webp|gif));base64,(.+)$/.exec(String(url));
+    if (!m) return json({ error: 'Unsupported image' }, 400);
+    if (m[2].length > 3_000_000) return json({ error: 'A photo is too large' }, 413);
+    images.push({ mime: m[1], data: m[2] });
+  }
+  if (!list.length && !images.length) return json({ error: 'Add an ingredient or a photo.' }, 400);
   const dish = String(body.description || '').slice(0, 120).trim();
+  const fromPhotos = !list.length;
 
   const prompt = [
-    `The user made${dish ? ` "${dish}"` : ' something'} from these ingredients (quantity, unit, ingredient):`,
+    fromPhotos
+      ? `The user made${dish ? ` "${dish}"` : ' something'} and attached photos. Identify each ingredient and estimate the amount used from the photos.`
+      : `The user made${dish ? ` "${dish}"` : ' something'} from these ingredients (quantity, unit, ingredient):`,
     ...list.map((i, n) => `${n + 1}. ${i.qty} ${i.unit} ${i.name}`),
-    'Give the nutrition for EXACTLY the stated quantity of each ingredient, in the same order, one item per ingredient.',
-    'Use standard reference values (USDA-style). Convert volume units sensibly for that ingredient (e.g. 1 tbsp peanut butter ≈ 16 g, 1 cup milk = 244 g, 1 tsp honey ≈ 7 g, 1 scoop whey ≈ 30 g unless a brand says otherwise).',
-    'If a brand is named, use that product\'s typical label values. Ice and water are 0.',
-    'Reply with JSON only, in exactly this shape (numbers without units):',
-    '{"name":"short name for the result","items":[{"name":"ingredient","amount":"the quantity and unit as given","grams":0,"kcal":0,"protein":0,"carbs":0,"fat":0}],"confidence":"low|medium|high","note":"one short sentence on any assumption"}',
-  ].join('\n');
+    images.length
+      ? `${images.length} photo(s) are attached: they may show ingredient packs, nutrition labels, or the finished dish. If a photo shows a nutrition label for an ingredient, use those exact label numbers scaled to the quantity. Use photos of the dish to judge portions.`
+      : '',
+    fromPhotos
+      ? 'Give one item per ingredient you can see or reasonably infer.'
+      : 'Give the nutrition for EXACTLY the stated quantity of each ingredient, in the same order, one item per ingredient.',
+    'Otherwise use standard reference values (USDA-style). Convert volume units sensibly for that ingredient (e.g. 1 tbsp peanut butter ≈ 16 g, 1 tbsp cream cheese ≈ 15 g, 1 cup milk = 244 g, 1 tsp honey ≈ 7 g, 1 scoop whey ≈ 30 g unless a label says otherwise).',
+    "If a brand is named or visible, use that product's label values. Ice and water are 0.",
+    'In "source" put "label" when you used a nutrition label from the photos for that item, otherwise "estimate".',
+    'Reply with JSON only, in exactly this shape (numbers without units; "qty" a number and "unit" one of g, ml, tsp, tbsp, cup, oz, piece, slice, scoop, handful, pinch):',
+    '{"name":"short name for the result","items":[{"name":"ingredient","qty":1,"unit":"piece","grams":0,"kcal":0,"protein":0,"carbs":0,"fat":0,"source":"estimate"}],"confidence":"low|medium|high","note":"one short sentence on any assumption"}',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   let text: string;
   try {
-    text = await askAi(prompt, undefined, 1500);
+    text = await askAi(prompt, images, 1800);
   } catch (e) {
     return json({ error: (e as Error).message }, e instanceof AiError ? e.status : 502);
   }
   try {
     const p = parseJson(text);
+    if (p.error) return json({ error: String(p.error) }, 422);
     const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
     const raw: Record<string, unknown>[] = Array.isArray(p.items) ? p.items : [];
-    // Keep the user's own names and amounts; take numbers from the model by position.
-    const items = list.map((ing, i) => {
-      const r = raw[i] ?? {};
-      return { name: ing.name, amount: `${ing.qty} ${ing.unit}`, grams: n(r.grams) || undefined, kcal: n(r.kcal), protein: n(r.protein), carbs: n(r.carbs), fat: n(r.fat) };
-    });
+    const fromLabel = (r: Record<string, unknown>) => (r.source === 'label' ? { fromLabel: true } : {});
+    const items = fromPhotos
+      ? raw.slice(0, 40).map((r) => {
+          const qty = n(r.qty) || 1;
+          const unit = String(r.unit || 'piece').slice(0, 12);
+          return { name: String(r.name || 'Ingredient').slice(0, 80), amount: `${qty} ${unit}`, qty, unit, grams: n(r.grams) || undefined, kcal: n(r.kcal), protein: n(r.protein), carbs: n(r.carbs), fat: n(r.fat), ...fromLabel(r) };
+        })
+      : // Keep the user's own names and amounts; take numbers from the model by position.
+        list.map((ing, i) => {
+          const r = raw[i] ?? {};
+          return { name: ing.name, amount: `${ing.qty} ${ing.unit}`, qty: ing.qty, unit: ing.unit, grams: n(r.grams) || undefined, kcal: n(r.kcal), protein: n(r.protein), carbs: n(r.carbs), fat: n(r.fat), ...fromLabel(r) };
+        });
+    if (!items.length) return json({ error: "Couldn't make out the ingredients. Try a clearer photo or type them in." }, 422);
     return json({ name: dish || String(p.name || 'My mix'), items, confidence: p.confidence || 'medium', note: p.note ? String(p.note).slice(0, 200) : '' });
   } catch {
     return json({ error: 'Could not work that out, please try again.' }, 502);

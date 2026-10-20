@@ -5,6 +5,9 @@ import { FillDot, Icon, Seg, portionWord, r0, toast } from '../components/ui';
 export interface EstimateItem extends Nutrition {
   name: string;
   amount: string;
+  qty?: number;
+  unit?: string;
+  fromLabel?: boolean;
 }
 export interface Estimate {
   name: string;
@@ -27,7 +30,7 @@ export function useAiEnabled() {
   return enabled;
 }
 
-async function requestEstimate(body: { image?: string; description?: string; restaurant?: string; kind: string; ingredients?: { name: string; qty: number; unit: string }[] }, signal?: AbortSignal): Promise<Estimate> {
+async function requestEstimate(body: { image?: string; description?: string; restaurant?: string; kind: string; ingredients?: { name: string; qty: number; unit: string }[]; images?: string[] }, signal?: AbortSignal): Promise<Estimate> {
   const res = await fetch('/api/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(d.error || `Estimate failed (${res.status})`);
