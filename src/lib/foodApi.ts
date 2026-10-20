@@ -51,6 +51,19 @@ export async function lookupBarcode(code: string): Promise<Food | null> {
 }
 
 export async function searchFoods(query: string, signal?: AbortSignal): Promise<Food[]> {
+  // Preferred: our Vercel function (no CORS issues, has a backup source, cached).
+  try {
+    const res = await fetch(`/api/food-search?q=${encodeURIComponent(query)}`, { signal });
+    if (res.ok) {
+      const data = await res.json();
+      return ((data.products ?? []) as OffProduct[]).map(toFood).filter((f): f is Food => !!f);
+    }
+    if (res.status !== 404) throw new Error(`Food search error (${res.status})`);
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e;
+    if (!/404/.test(String(e)) && !(e instanceof TypeError)) throw e;
+  }
+  // Fallback (local dev without the API): straight to Open Food Facts.
   const url =
     `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
     `&search_simple=1&action=process&json=1&page_size=25&fields=${FIELDS}`;
@@ -58,4 +71,29 @@ export async function searchFoods(query: string, signal?: AbortSignal): Promise<
   if (!res.ok) throw new Error(`Food search error (${res.status})`);
   const data = await res.json();
   return ((data.products ?? []) as OffProduct[]).map(toFood).filter((f): f is Food => !!f);
+}
+
+/** Ask the AI for typical nutrition of a generic food ("boiled egg", "kaya toast"). */
+export async function askAiForFood(query: string): Promise<Food> {
+  const res = await fetch('/api/estimate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'food', description: query }),
+  });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || (res.status === 404 || res.status === 503 ? 'AI is not set up (add GEMINI_API_KEY in Vercel).' : `Couldn't look that up (${res.status})`));
+  const p = d.product;
+  return {
+    id: `ai-${query.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
+    name: p.name,
+    brand: p.brand,
+    per: p.per,
+    servingG: p.servingG,
+    servingLabel: p.servingLabel,
+    kcal: p.kcal,
+    protein: p.protein,
+    carbs: p.carbs,
+    fat: p.fat,
+    source: 'ai',
+  };
 }

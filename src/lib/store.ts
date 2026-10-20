@@ -26,7 +26,7 @@ export interface Food extends Nutrition {
   per: '100g' | 'serving';
   servingG?: number; // grams in one serving, if known
   servingLabel?: string;
-  source: 'openfoodfacts' | 'custom' | 'meal';
+  source: 'openfoodfacts' | 'custom' | 'meal' | 'common' | 'ai';
 }
 
 export interface LogEntry extends Nutrition {

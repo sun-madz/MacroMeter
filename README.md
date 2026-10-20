@@ -15,6 +15,7 @@ A calm, safe calorie-deficit and macro tracker. React + Vite, deployed on Vercel
 - **Intuitive eating mode** (Settings): hides all calorie numbers. The day shows as a filling circle with protein/carbs/fat circles, each food shows a small fill dot, and quick add works by portion size.
 - **Barcode scanner** for snacks and ingredients (camera, works on iPhone and Android over https), with product data from [Open Food Facts](https://world.openfoodfacts.org). Unknown barcodes can be added once and are remembered.
 - **Create → Something I made**: name a smoothie, shake or snack, list ingredients with an amount and unit (g, ml, tsp, tbsp, cup, scoop, piece…), and get per-ingredient and per-serving nutrition. Add up to 4 photos (packs, nutrition labels, the finished dish) and Gemini reads the labels for exact numbers, or works out the ingredients itself if you leave the list empty. It's saved to your meals for re-logging or sending to the cookbook. **From a label** keeps the manual nutrition-label form.
+- **Search**: ~100 everyday foods built in (instant, offline, per-portion e.g. "1 large egg"), packaged products from Open Food Facts via a server-side search with a backup source, and "Ask Gemini" for anything else.
 - **Scan package**: snap any part of a pack. A barcode in the photo is looked up first; otherwise the nutrition label (name, brand, per-100 g values, serving size) is read with AI. Needs an AI key for label reading.
 - **Photo estimate**: snap or upload a meal photo, optionally describe it, and get an itemised estimate you can trim and scale (½× to 2×) before logging. Needs an AI key (see Deploy).
 - **Eating out**: describe a restaurant or takeaway order (Taco Bell, McDonald's, mamak…) including mixed rice stalls, with an optional photo for an AI estimate that uses chains' published nutrition where known.
@@ -62,7 +63,7 @@ Each meal is appended as a heading with its ingredient list and an empty "Method
 ## Project layout
 
 ```
-api/                    Vercel functions (cookbook proxy, AI chef, photo/restaurant estimates)
+api/                    Vercel functions (cookbook proxy, food search, AI chef, photo/restaurant/recipe estimates)
 google-apps-script/     Script to paste into your Google Doc
 public/                 Icons and manifest
 scripts/check-calc.ts   Sanity checks for the maths

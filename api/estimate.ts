@@ -76,7 +76,7 @@ interface EstimateRequest {
   image?: string; // data URL (image/jpeg|png|webp)
   description?: string;
   restaurant?: string;
-  kind?: 'photo' | 'restaurant' | 'package' | 'recipe';
+  kind?: 'photo' | 'restaurant' | 'package' | 'recipe' | 'food';
   ingredients?: { name: string; qty: number; unit: string }[];
   images?: string[]; // data URLs, used by 'recipe'
 }
@@ -91,6 +91,7 @@ export async function POST(request: Request): Promise<Response> {
     return json({ error: 'Invalid request' }, 400);
   }
   if (body.kind === 'recipe') return recipe(body);
+  if (body.kind === 'food') return genericFood(String(body.description || ''));
 
   const description = (body.description || '').slice(0, 600).trim();
   const restaurant = (body.restaurant || '').slice(0, 120).trim();
@@ -212,6 +213,49 @@ async function recipe(body: EstimateRequest): Promise<Response> {
     return json({ name: dish || String(p.name || 'My mix'), items, confidence: p.confidence || 'medium', note: p.note ? String(p.note).slice(0, 200) : '' });
   } catch {
     return json({ error: 'Could not work that out, please try again.' }, 502);
+  }
+}
+
+/** Typical nutrition for a generic food the user typed into search ("boiled egg", "kaya toast"). */
+async function genericFood(query: string): Promise<Response> {
+  const q = query.trim().slice(0, 100);
+  if (q.length < 2) return json({ error: 'Type a food to look up.' }, 400);
+  const prompt = [
+    `Give typical nutrition for this food: "${q}".`,
+    'Use standard reference values (USDA-style). If it is a Malaysian/Asian dish, use typical local values.',
+    'Give values per 100 g, plus the weight in grams of one typical portion and a short label for that portion (e.g. "1 large egg", "1 slice", "1 plate").',
+    'If it is a branded product, use its label values and fill "brand".',
+    'Reply with JSON only, in exactly this shape (numbers without units):',
+    '{"name":"clear food name","brand":"","per":"100g","servingG":0,"servingLabel":"1 large egg","kcal":0,"protein":0,"carbs":0,"fat":0}',
+    'If it is not a food or drink, reply {"error":"That doesn\'t look like a food"}.',
+  ].join('\n');
+  let text: string;
+  try {
+    text = await askAi(prompt, undefined, 500);
+  } catch (e) {
+    return json({ error: (e as Error).message }, e instanceof AiError ? e.status : 502);
+  }
+  try {
+    const p = parseJson(text);
+    if (p.error) return json({ error: String(p.error) }, 422);
+    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+    const servingG = n(p.servingG) || undefined;
+    const label = p.servingLabel ? String(p.servingLabel).slice(0, 40) : '';
+    return json({
+      product: {
+        name: String(p.name || q).slice(0, 100),
+        brand: p.brand ? String(p.brand).slice(0, 60) : undefined,
+        per: '100g',
+        servingG,
+        servingLabel: label && servingG ? `${label} (${Math.round(servingG)} g)` : label || undefined,
+        kcal: n(p.kcal),
+        protein: n(p.protein),
+        carbs: n(p.carbs),
+        fat: n(p.fat),
+      },
+    });
+  } catch {
+    return json({ error: 'Could not look that up, please try again.' }, 502);
   }
 }
 

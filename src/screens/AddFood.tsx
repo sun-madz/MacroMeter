@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { lookupBarcode, searchFoods } from '../lib/foodApi';
+import { askAiForFood, lookupBarcode, searchFoods } from '../lib/foodApi';
+import { searchCommon } from '../lib/commonFoods';
 import {
   MEAL_SLOTS,
   addLog,
@@ -156,7 +157,7 @@ function FoodRow({ f, onPick, intuitive, target, onDelete }: { f: Food; onPick: 
       <div className="grow">
         <div className="title">{f.name}</div>
         <div className="small muted">
-          {[f.brand, f.source === 'meal' ? 'Your meal' : null, intuitive ? null : f.per === '100g' ? `${r0(f.kcal)} kcal / 100 g` : `${r0(f.kcal)} kcal / serving`].filter(Boolean).join(' · ') || ' '}
+          {[f.brand, f.source === 'meal' ? 'Your meal' : null, intuitive ? null : f.per === '100g' ? (f.servingG && f.servingLabel ? `${r0((f.kcal * f.servingG) / 100)} kcal · ${f.servingLabel}` : `${r0(f.kcal)} kcal / 100 g`) : `${r0(f.kcal)} kcal / serving`].filter(Boolean).join(' · ') || ' '}
         </div>
       </div>
       {onDelete &&
@@ -194,18 +195,24 @@ function SearchTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; i
   const [results, setResults] = useState<Food[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askErr, setAskErr] = useState('');
   const ctrl = useRef<AbortController | null>(null);
+  const term = q.trim();
 
   const local = useMemo(() => {
-    const t = q.trim().toLowerCase();
+    const t = term.toLowerCase();
     if (!t) return [];
-    return s.foods.filter((f) => f.name.toLowerCase().includes(t)).slice(0, 8);
-  }, [q, s.foods]);
+    const words = t.split(/\s+/);
+    return s.foods.filter((f) => f.source !== 'common' && words.every((w) => f.name.toLowerCase().includes(w))).slice(0, 6);
+  }, [term, s.foods]);
+  const common = useMemo(() => (term ? searchCommon(term) : []), [term]);
 
   useEffect(() => {
-    const t = q.trim();
-    if (t.length < 3) {
+    setAskErr('');
+    if (term.length < 3) {
       setResults([]);
+      setErr(null);
       return;
     }
     const timer = setTimeout(async () => {
@@ -214,37 +221,68 @@ function SearchTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; i
       setLoading(true);
       setErr(null);
       try {
-        setResults(await searchFoods(t, ctrl.current.signal));
+        setResults(await searchFoods(term, ctrl.current.signal));
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') setErr('Search is unavailable right now. Try scanning or create the food.');
+        if ((e as Error).name !== 'AbortError') setErr("Packaged-food search isn't responding right now.");
       } finally {
         setLoading(false);
       }
     }, 450);
     return () => clearTimeout(timer);
-  }, [q]);
+  }, [term]);
+
+  const ask = async () => {
+    setAsking(true);
+    setAskErr('');
+    try {
+      onPick(await askAiForFood(term));
+    } catch (e) {
+      setAskErr((e as Error).message);
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  const row = (f: Food) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} />;
 
   return (
     <div className="stack">
       <div className="input-suffix">
-        <input className="input" autoFocus placeholder="Search foods, e.g. greek yogurt" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" autoFocus placeholder="Search foods, e.g. boiled egg" value={q} onChange={(e) => setQ(e.target.value)} />
         <span><Icon name="search" size={18} /></span>
       </div>
       {local.length > 0 && (
         <div className="card">
           <div className="small muted" style={{ fontWeight: 700 }}>Your foods</div>
-          <div className="list">{local.map((f) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} />)}</div>
+          <div className="list">{local.map(row)}</div>
         </div>
       )}
-      {loading && <div className="empty">Searching…</div>}
-      {err && <div className="error">{err}</div>}
+      {common.length > 0 && (
+        <div className="card">
+          <div className="small muted" style={{ fontWeight: 700 }}>Everyday foods</div>
+          <div className="list">{common.map(row)}</div>
+        </div>
+      )}
+      {loading && <div className="empty">Searching packaged foods…</div>}
       {results.length > 0 && (
         <div className="card">
-          <div className="small muted" style={{ fontWeight: 700 }}>Open Food Facts</div>
-          <div className="list">{results.map((f) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} />)}</div>
+          <div className="small muted" style={{ fontWeight: 700 }}>Packaged products</div>
+          <div className="list">{results.map(row)}</div>
         </div>
       )}
-      {!loading && q.trim().length >= 3 && !results.length && !local.length && !err && <div className="empty">No matches. Try the Create tab.</div>}
+      {err && <div className="hint">{err} Everyday foods above still work, or ask Gemini.</div>}
+      {term.length >= 2 && !loading && (
+        <div className="card row">
+          <div className="grow small">
+            <b>{local.length || common.length || results.length ? "Don't see it?" : 'No matches yet.'}</b>
+            <div className="muted">Get typical nutrition for “{term}” from Gemini.</div>
+          </div>
+          <button className="btn sm" onClick={ask} disabled={asking}>
+            <span className={asking ? 'spin' : ''} style={{ display: 'inline-flex' }}><Icon name="sparkle" size={16} /></span> {asking ? 'Asking…' : 'Ask Gemini'}
+          </button>
+        </div>
+      )}
+      {askErr && <div className="error">{askErr}</div>}
     </div>
   );
 }
@@ -479,6 +517,7 @@ function AmountPicker({ food, target, intuitive, mode, slot, setSlot, onConfirm 
         {food.brand && <div className="muted">{food.brand}</div>}
       </div>
 
+      {food.servingLabel && <div className="hint" style={{ marginTop: -10 }}>1 serving = {food.servingLabel}</div>}
       {hasServing && food.servingG && (
         <Seg value={unit} onChange={(u) => { setUnit(u); setQty(u === 'g' ? String(food.servingG ?? 100) : '1'); }} options={[{ value: 'serving', label: 'Servings' }, { value: 'g', label: 'Grams' }]} />
       )}

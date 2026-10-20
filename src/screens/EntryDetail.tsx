@@ -262,7 +262,7 @@ export function EntryDetail({ entryId, onClose }: { entryId: string; onClose: ()
             )}
             {food.servingLabel && <div className="muted">Serving: {food.servingLabel}</div>}
             {food.barcode && <div className="muted">Barcode {food.barcode}</div>}
-            <div className="muted">{food.source === 'openfoodfacts' ? 'From Open Food Facts' : 'Added by you'}</div>
+            <div className="muted">{{ openfoodfacts: 'From Open Food Facts', common: 'Everyday foods (standard values)', ai: 'Typical values from Gemini', custom: 'Added by you', meal: 'Your meal' }[food.source]}</div>
           </div>
         )}
 
