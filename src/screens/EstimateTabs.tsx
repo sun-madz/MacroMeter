@@ -205,7 +205,14 @@ export function EstimateResult({ est, date, slot, setSlot, onDone, onRetry }: { 
         className="btn block"
         disabled={!kept.length}
         onClick={() => {
-          addLog({ date, slot, name: name.trim() || 'Meal', amount: `${portion === 1 ? '' : `${portion}× `}estimate`, ...n });
+          addLog({
+            date,
+            slot,
+            name: name.trim() || 'Meal',
+            amount: `${portion === 1 ? '' : `${portion}× `}estimate`,
+            ...n,
+            items: kept.map((it) => ({ name: it.name, amount: portion === 1 ? it.amount : `${portion}× ${it.amount}`, kcal: it.kcal * portion, protein: it.protein * portion, carbs: it.carbs * portion, fat: it.fat * portion })),
+          });
           toast(`Logged ${name.trim() || 'meal'}`);
           onDone();
         }}

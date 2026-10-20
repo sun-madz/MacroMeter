@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { addDays, macrosFor, todayKey } from '../lib/calc';
-import { MEAL_SLOTS, logsFor, setState, sumNutrition, useStore, type MealSlot } from '../lib/store';
+import { MEAL_SLOTS, logsFor, sumNutrition, useStore, type MealSlot } from '../lib/store';
 import { FillCircle, FillDot, Icon, Ring, fullnessPhrase, r0 } from '../components/ui';
 import { GoalCard } from './Progress';
+import { EntryDetail } from './EntryDetail';
 import type { Tab as AddTab } from './AddFood';
 
 export function Today({ date, setDate, onAdd, goProgress }: { date: string; setDate: (d: string) => void; onAdd: (slot?: MealSlot, tab?: AddTab) => void; goProgress: () => void }) {
@@ -131,28 +132,15 @@ export function Today({ date, setDate, onAdd, goProgress }: { date: string; setD
               ) : (
                 <div className="list">
                   {items.map((e) => (
-                    <div key={e.id} className="list-item tap" onClick={() => setOpen(open === e.id ? null : e.id)}>
+                    <div key={e.id} className="list-item tap" role="button" tabIndex={0} onClick={() => setOpen(e.id)} onKeyDown={(ev) => ev.key === 'Enter' && setOpen(e.id)}>
                       <div className="grow">
                         <div className="title">{e.name}</div>
                         <div className="small muted">
                           {[e.amount, intuitive ? null : `P ${r0(e.protein)} · C ${r0(e.carbs)} · F ${r0(e.fat)}`].filter(Boolean).join(' · ')}
                         </div>
                       </div>
-                      {open === e.id ? (
-                        <button
-                          className="btn danger sm"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            setState((st) => ({ ...st, log: st.log.filter((l) => l.id !== e.id) }));
-                          }}
-                        >
-                          <Icon name="trash" size={16} /> Remove
-                        </button>
-                      ) : intuitive ? (
-                        <FillDot fraction={e.kcal / target.kcal} />
-                      ) : (
-                        <span className="num" style={{ fontWeight: 700 }}>{r0(e.kcal)}</span>
-                      )}
+                      {intuitive ? <FillDot fraction={e.kcal / target.kcal} /> : <span className="num" style={{ fontWeight: 700 }}>{r0(e.kcal)}</span>}
+                      <span className="muted" style={{ display: 'inline-flex' }}><Icon name="right" size={16} /></span>
                     </div>
                   ))}
                 </div>
@@ -161,6 +149,8 @@ export function Today({ date, setDate, onAdd, goProgress }: { date: string; setD
           </div>
         );
       })}
+
+      {open && <EntryDetail entryId={open} onClose={() => setOpen(null)} />}
 
       <div className="section-title"><h3>Goal</h3></div>
       <GoalCard compact onClick={goProgress} />

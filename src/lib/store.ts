@@ -36,6 +36,12 @@ export interface LogEntry extends Nutrition {
   name: string;
   amount: string; // human description, e.g. "150 g" or "1 serving"
   foodId?: string;
+  items?: LoggedItem[]; // what was in it (photo / eating-out estimates), already scaled to the portion eaten
+}
+
+export interface LoggedItem extends Nutrition {
+  name: string;
+  amount: string;
 }
 
 export interface Ingredient extends Nutrition {
