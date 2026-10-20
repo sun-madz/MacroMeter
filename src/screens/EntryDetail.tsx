@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { macrosFor, todayKey } from '../lib/calc';
-import { MEAL_SLOTS, addLog, setState, sumNutrition, useStore, type LoggedItem, type LogEntry } from '../lib/store';
-import { FillCircle, FillDot, Icon, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
+import { MEAL_SLOTS, addLog, setState, sumNutrition, useStore, type LoggedItem, type LogEntry, type Meal } from '../lib/store';
+import { FillCircle, FillDot, Icon, NumField, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
+import { MixBuilder, rowsFromItems } from './MixBuilder';
 
 const STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
@@ -17,8 +18,11 @@ export function EntryDetail({ entryId, onClose }: { entryId: string; onClose: ()
   const s = useStore();
   const entry = s.log.find((l) => l.id === entryId);
   // Remember the entry as it was when opened, so portion changes don't compound.
-  const [base] = useState<LogEntry | undefined>(entry);
+  const [base, setBase] = useState<LogEntry | undefined>(entry);
   const [factor, setFactor] = useState(1);
+  const [editing, setEditing] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [form, setForm] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   if (!entry || !base) return null;
 
   const intuitive = s.settings.intuitive;
@@ -31,7 +35,7 @@ export function EntryDetail({ entryId, onClose }: { entryId: string; onClose: ()
   const food = !meal && entry.foodId ? s.foods.find((f) => f.id === entry.foodId) : undefined;
   if (entry.items?.length) {
     items = entry.items;
-    source = 'Estimated items';
+    source = /estimate/.test(entry.amount) ? 'Estimated items' : 'Ingredients';
   } else if (meal && meal.ingredients.length) {
     const total = sumNutrition(meal.ingredients);
     const share = total.kcal > 0 ? entry.kcal / total.kcal : 1 / (meal.servings || 1);
@@ -47,6 +51,51 @@ export function EntryDetail({ entryId, onClose }: { entryId: string; onClose: ()
   }
 
   const update = (patch: Partial<LogEntry>) => setState((st) => ({ ...st, log: st.log.map((l) => (l.id === entry.id ? { ...l, ...patch } : l)) }));
+  /** A real edit (not a portion tweak): save it and make it the new "as logged". */
+  const commit = (patch: Partial<LogEntry>) => {
+    update(patch);
+    setBase({ ...entry, ...patch });
+    setFactor(1);
+  };
+
+  const startEdit = () => {
+    setForm({ name: entry.name, kcal: String(r0(entry.kcal)), protein: String(r1(entry.protein)), carbs: String(r1(entry.carbs)), fat: String(r1(entry.fat)) });
+    setEditing(true);
+  };
+
+  const removeItem = (index: number) => {
+    if (!items) return;
+    const rest = items.filter((_, i) => i !== index);
+    if (!rest.length) return toast('Keep at least one ingredient, or remove the whole entry');
+    const t = sumNutrition(rest);
+    commit({ items: rest, ...t, foodId: meal ? undefined : entry.foodId });
+    toast('Ingredient removed');
+  };
+
+  const saveEdit = () => {
+    const num = (v: string) => Math.max(0, parseFloat(v) || 0);
+    const patch: Partial<LogEntry> = { name: form.name.trim() || entry.name };
+    if (!items) Object.assign(patch, { kcal: num(form.kcal), protein: num(form.protein), carbs: num(form.carbs), fat: num(form.fat) });
+    commit(patch);
+    setEditing(false);
+    toast('Saved');
+  };
+
+  // Rebuilt with the ingredient builder: update the entry (and the saved meal it came from).
+  const onRebuilt = (m: Meal) => {
+    const t = sumNutrition(m.ingredients);
+    if (meal) {
+      const oldTotal = sumNutrition(meal.ingredients).kcal;
+      const servingsEaten = oldTotal > 0 ? entry.kcal / (oldTotal / (meal.servings || 1)) : 1;
+      const k = servingsEaten / (m.servings || 1);
+      commit({ name: m.name, kcal: t.kcal * k, protein: t.protein * k, carbs: t.carbs * k, fat: t.fat * k });
+    } else {
+      commit({ name: m.name, items: m.ingredients.map((i) => ({ name: i.name, amount: i.amount, kcal: i.kcal, protein: i.protein, carbs: i.carbs, fat: i.fat })), ...t });
+    }
+    setRebuilding(false);
+    setEditing(false);
+    toast('Updated');
+  };
 
   const changeFactor = (f: number) => {
     setFactor(f);
@@ -68,9 +117,74 @@ export function EntryDetail({ entryId, onClose }: { entryId: string; onClose: ()
     { label: 'Fat', g: entry.fat, pct: (entry.fat * 9) / kcalFromMacros, color: 'var(--fat)', of: target.fat },
   ];
 
+  if (rebuilding) {
+    const initialRows = meal ? rowsFromItems(meal.ingredients) : rowsFromItems(items ?? [{ name: entry.name, amount: '1 piece' }]);
+    return (
+      <Sheet
+        title="Edit ingredients"
+        onClose={onClose}
+        right={<button className="icon-btn" onClick={() => setRebuilding(false)} aria-label="Back"><Icon name="left" /></button>}
+      >
+        {meal && <p className="small muted" style={{ marginTop: -6 }}>This also updates “{meal.name}” in your saved meals.</p>}
+        <MixBuilder
+          initial={{ name: entry.name, servings: meal?.servings ?? 1, rows: initialRows }}
+          editMealId={meal?.id}
+          persist={!!meal}
+          saveLabel="Save changes"
+          onSaved={onRebuilt}
+        />
+      </Sheet>
+    );
+  }
+
   return (
-    <Sheet title={entry.name} onClose={onClose}>
+    <Sheet
+      title={entry.name}
+      onClose={onClose}
+      right={
+        editing ? null : (
+          <button className="btn sm ghost" onClick={startEdit}>
+            <Icon name="edit" size={16} /> Edit
+          </button>
+        )
+      }
+    >
       <div className="stack">
+        {editing && (
+          <div className="card stack" style={{ border: '1.5px solid var(--green)' }}>
+            <label className="field">
+              Name
+              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </label>
+            {items ? (
+              <>
+                <p className="hint" style={{ margin: 0 }}>Remove an ingredient with the ✕ below, or change ingredients and amounts and recalculate.</p>
+                <button className="btn outline" onClick={() => setRebuilding(true)}>
+                  <Icon name="edit" size={18} /> Change ingredients & amounts
+                </button>
+              </>
+            ) : (
+              <>
+                {!intuitive && (
+                  <div className="grid2">
+                    <NumField label="Calories" value={form.kcal} onChange={(v) => setForm({ ...form, kcal: v })} suffix="kcal" />
+                    <NumField label="Protein" value={form.protein} onChange={(v) => setForm({ ...form, protein: v })} suffix="g" />
+                    <NumField label="Carbs" value={form.carbs} onChange={(v) => setForm({ ...form, carbs: v })} suffix="g" />
+                    <NumField label="Fat" value={form.fat} onChange={(v) => setForm({ ...form, fat: v })} suffix="g" />
+                  </div>
+                )}
+                <button className="btn outline" onClick={() => setRebuilding(true)}>
+                  <Icon name="edit" size={18} /> Rebuild from ingredients
+                </button>
+              </>
+            )}
+            <div className="row">
+              <button className="btn ghost grow" onClick={() => setEditing(false)}>Cancel</button>
+              <button className="btn grow" onClick={saveEdit}>Save</button>
+            </div>
+          </div>
+        )}
+
         <div className="row wrap" style={{ gap: 6, marginTop: -6 }}>
           <span className="chip">{MEAL_SLOTS.find((m) => m.id === entry.slot)?.label} · {day}</span>
           {entry.amount && <span className="chip">{entry.amount}</span>}
@@ -127,6 +241,11 @@ export function EntryDetail({ entryId, onClose }: { entryId: string; onClose: ()
                     </div>
                   </div>
                   {intuitive ? <FillDot fraction={it.kcal / target.kcal} size={22} /> : <span className="num small" style={{ fontWeight: 700 }}>{r0(it.kcal)}</span>}
+                  {editing && (
+                    <button className="icon-btn sm" onClick={() => removeItem(i)} aria-label={`Remove ${it.name}`} style={{ color: 'var(--red)' }}>
+                      <Icon name="x" size={16} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

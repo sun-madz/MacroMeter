@@ -148,7 +148,8 @@ function guessSlot(): MealSlot {
   return 'snacks';
 }
 
-function FoodRow({ f, onPick, intuitive, target }: { f: Food; onPick: (f: Food) => void; intuitive: boolean; target: number }) {
+function FoodRow({ f, onPick, intuitive, target, onDelete }: { f: Food; onPick: (f: Food) => void; intuitive: boolean; target: number; onDelete?: () => void }) {
+  const [confirming, setConfirming] = useState(false);
   const ref = f.per === '100g' ? nutritionFor(f, f.servingG ? 1 : 100, f.servingG ? 'serving' : 'g') : f;
   return (
     <div className="list-item tap" onClick={() => onPick(f)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onPick(f)}>
@@ -158,6 +159,30 @@ function FoodRow({ f, onPick, intuitive, target }: { f: Food; onPick: (f: Food) 
           {[f.brand, f.source === 'meal' ? 'Your meal' : null, intuitive ? null : f.per === '100g' ? `${r0(f.kcal)} kcal / 100 g` : `${r0(f.kcal)} kcal / serving`].filter(Boolean).join(' · ') || ' '}
         </div>
       </div>
+      {onDelete &&
+        (confirming ? (
+          <button
+            className="btn danger sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            Delete
+          </button>
+        ) : (
+          <button
+            className="icon-btn sm plain"
+            aria-label={`Delete ${f.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirming(true);
+              setTimeout(() => setConfirming(false), 3000);
+            }}
+          >
+            <Icon name="trash" size={16} />
+          </button>
+        ))}
       {intuitive ? <FillDot fraction={ref.kcal / target} /> : <Icon name="plus" size={20} />}
     </div>
   );
@@ -387,7 +412,21 @@ function MineTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; int
       {meals.length > 0 && (
         <div className="card">
           <div className="small muted" style={{ fontWeight: 700 }}>Meals you've cooked</div>
-          <div className="list">{meals.map((f) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} />)}</div>
+          <div className="list">
+            {meals.map((f) => (
+              <FoodRow
+                key={f.id}
+                f={f}
+                onPick={onPick}
+                intuitive={intuitive}
+                target={target}
+                onDelete={() => {
+                  setState((st) => ({ ...st, meals: st.meals.filter((m) => `meal-${m.id}` !== f.id) }));
+                  toast(`Deleted ${f.name}`);
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
       <div className="card">
@@ -401,7 +440,21 @@ function MineTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; int
       {custom.length > 0 && (
         <div className="card">
           <div className="small muted" style={{ fontWeight: 700 }}>Created by you</div>
-          <div className="list">{custom.map((f) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} />)}</div>
+          <div className="list">
+            {custom.map((f) => (
+              <FoodRow
+                key={f.id}
+                f={f}
+                onPick={onPick}
+                intuitive={intuitive}
+                target={target}
+                onDelete={() => {
+                  setState((st) => ({ ...st, foods: st.foods.filter((x) => x.id !== f.id) }));
+                  toast(`Deleted ${f.name}`);
+                }}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -57,24 +57,59 @@ const MAX_PHOTOS = 4;
 
 const MSGS = ['Reading the labels…', 'Weighing the ingredients…', 'Converting spoons and cups…', 'Looking up nutrition…', 'Adding it all up…'];
 
-export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
+/** Turns logged items ("2 piece", "1.5 tbsp", "2× 1 tsp", "1 item") back into editable rows. */
+export function rowsFromItems(items: { name: string; amount: string }[]): { name: string; qty: string; unit: string }[] {
+  const known = new Set(UNITS.map((u) => u.value));
+  const alias: Record<string, string> = { pcs: 'piece', pc: 'piece', pieces: 'piece', item: 'piece', items: 'piece', whole: 'piece', slices: 'slice', cups: 'cup', scoops: 'scoop', grams: 'g', gram: 'g' };
+  return items.map((it) => {
+    let a = it.amount.trim();
+    let mult = 1;
+    const x = /^(\d+(?:\.\d+)?)×\s*(.*)$/.exec(a);
+    if (x) {
+      mult = parseFloat(x[1]);
+      a = x[2];
+    }
+    const m = /^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?/.exec(a);
+    const qty = m ? parseFloat(m[1]) * mult : mult;
+    const raw = (m?.[2] || '').toLowerCase();
+    const unit = known.has(raw) ? raw : alias[raw] ?? (guessUnit(it.name) || 'piece');
+    return { name: it.name, qty: String(Math.round(qty * 100) / 100), unit };
+  });
+}
+
+interface MixBuilderProps {
+  onSaved: (meal: Meal) => void;
+  /** Start from these values instead of the shared draft (used when editing). */
+  initial?: { name: string; servings: number; rows: { name: string; qty: string; unit: string }[] };
+  /** Replace this saved meal instead of adding a new one. */
+  editMealId?: string;
+  /** Save the result to "Meals you've cooked" (default true). */
+  persist?: boolean;
+  saveLabel?: string;
+}
+
+export function MixBuilder({ onSaved, initial, editMealId, persist = true, saveLabel = 'Save & log it' }: MixBuilderProps) {
+  const usesDraft = !initial;
+  const start = initial
+    ? { name: initial.name, servings: initial.servings, rows: initial.rows.map((r) => ({ ...r, id: uid(), unitTouched: true })), photos: [] as string[] }
+    : draft;
   const s = useStore();
   const enabled = useAiEnabled();
   const intuitive = s.settings.intuitive;
   const target = s.plan?.kcal ?? 2000;
-  const [name, setNameRaw] = useState(draft.name);
-  const [servings, setServingsRaw] = useState(draft.servings);
-  const [rows, setRowsRaw] = useState<Row[]>(draft.rows);
-  const [photos, setPhotosRaw] = useState<string[]>(draft.photos);
+  const [name, setNameRaw] = useState(start.name);
+  const [servings, setServingsRaw] = useState(start.servings);
+  const [rows, setRowsRaw] = useState<Row[]>(start.rows);
+  const [photos, setPhotosRaw] = useState<string[]>(start.photos);
   const [est, setEst] = useState<Estimate | null>(null);
   const camera = useRef<HTMLInputElement>(null);
   const library = useRef<HTMLInputElement>(null);
   const { busy, err, run, cancel } = useEstimateRun(setEst);
 
-  const setName = (v: string) => { draft = { ...draft, name: v }; setNameRaw(v); };
-  const setServings = (v: number) => { draft = { ...draft, servings: v }; setServingsRaw(v); };
-  const setRows = (v: Row[]) => { draft = { ...draft, rows: v }; setRowsRaw(v); setEst(null); };
-  const setPhotos = (v: string[]) => { draft = { ...draft, photos: v }; setPhotosRaw(v); setEst(null); };
+  const setName = (v: string) => { if (usesDraft) draft = { ...draft, name: v }; setNameRaw(v); };
+  const setServings = (v: number) => { if (usesDraft) draft = { ...draft, servings: v }; setServingsRaw(v); };
+  const setRows = (v: Row[]) => { if (usesDraft) draft = { ...draft, rows: v }; setRowsRaw(v); setEst(null); };
+  const setPhotos = (v: string[]) => { if (usesDraft) draft = { ...draft, photos: v }; setPhotosRaw(v); setEst(null); };
   const addPhotos = async (files: FileList | null) => {
     if (!files) return;
     const room = MAX_PHOTOS - photos.length;
@@ -144,20 +179,22 @@ export function MixBuilder({ onSaved }: { onSaved: (meal: Meal) => void }) {
         <button
           className="btn block"
           onClick={() => {
+            const old = editMealId ? s.meals.find((m) => m.id === editMealId) : undefined;
             const meal: Meal = {
-              id: uid(),
+              id: old?.id ?? uid(),
               name: name.trim() || est.name,
               servings: per,
-              createdAt: new Date().toISOString(),
+              createdAt: old?.createdAt ?? new Date().toISOString(),
+              sentToCookbook: old?.sentToCookbook,
               ingredients: est.items.map((it) => ({ id: uid(), name: it.name, amount: it.amount, kcal: it.kcal, protein: it.protein, carbs: it.carbs, fat: it.fat })),
             };
-            setState((st) => ({ ...st, meals: [meal, ...st.meals] }));
-            draft = { name: '', servings: 1, rows: [blankRow(), blankRow()], photos: [] };
-            toast('Saved to your meals');
+            if (persist) setState((st) => ({ ...st, meals: old ? st.meals.map((m) => (m.id === old.id ? meal : m)) : [meal, ...st.meals] }));
+            if (usesDraft) draft = { name: '', servings: 1, rows: [blankRow(), blankRow()], photos: [] };
+            if (persist) toast(old ? 'Meal updated' : 'Saved to your meals');
             onSaved(meal);
           }}
         >
-          Save & log it
+          {saveLabel}
         </button>
         <button
           className="btn ghost block"
