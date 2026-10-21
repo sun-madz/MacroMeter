@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { MEAL_SLOTS, addLog, sumNutrition, useStore, type MealSlot, type Nutrition } from '../lib/store';
-import { FillDot, Icon, Seg, portionWord, r0, toast } from '../components/ui';
+import { FillDot, Icon, NumField, Seg, portionWord, r0, toast } from '../components/ui';
 
 export interface EstimateItem extends Nutrition {
   name: string;
@@ -136,7 +136,11 @@ export function EstimateResult({ est, date, slot, setSlot, onDone, onRetry }: { 
   const [skip, setSkip] = useState<Set<number>>(new Set());
   const kept = est.items.filter((_, i) => !skip.has(i));
   const base = sumNutrition(kept);
-  const n = { kcal: base.kcal * portion, protein: base.protein * portion, carbs: base.carbs * portion, fat: base.fat * portion };
+  const est0 = { kcal: base.kcal * portion, protein: base.protein * portion, carbs: base.carbs * portion, fat: base.fat * portion };
+  // Your own numbers, if you'd rather override the estimate.
+  const [own, setOwn] = useState<null | { kcal: string; protein: string; carbs: string; fat: string }>(null);
+  const num = (v: string) => Math.max(0, parseFloat(v) || 0);
+  const n = own ? { kcal: num(own.kcal), protein: num(own.protein), carbs: num(own.carbs), fat: num(own.fat) } : est0;
 
   return (
     <div className="stack">
@@ -175,6 +179,7 @@ export function EstimateResult({ est, date, slot, setSlot, onDone, onRetry }: { 
         {est.note && <p className="hint" style={{ margin: '8px 0 0' }}>{est.note}</p>}
       </div>
 
+{!own && (
       <div>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>How much did you eat?</div>
         <div className="seg">
@@ -185,8 +190,17 @@ export function EstimateResult({ est, date, slot, setSlot, onDone, onRetry }: { 
           ))}
         </div>
       </div>
+      )}
 
-      {intuitive ? (
+      {own ? (
+        <div className="card stack">
+          <div className="row between">
+            <h3>Your numbers</h3>
+            <button className="link-btn" onClick={() => setOwn(null)}>Use the estimate</button>
+          </div>
+          <MacroInputs value={own} onChange={setOwn} />
+        </div>
+      ) : intuitive ? (
         <div className="card row">
           <FillDot fraction={n.kcal / target} size={56} />
           <div>
@@ -195,24 +209,33 @@ export function EstimateResult({ est, date, slot, setSlot, onDone, onRetry }: { 
           </div>
         </div>
       ) : (
-        <div className="grid2">
-          <div className="stat"><b className="num">{r0(n.kcal)}</b><span>kcal (estimate)</span></div>
-          <div className="stat"><b className="num">{r0(n.protein)} g</b><span>Protein</span></div>
-          <div className="stat"><b className="num">{r0(n.carbs)} g</b><span>Carbs</span></div>
-          <div className="stat"><b className="num">{r0(n.fat)} g</b><span>Fat</span></div>
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="grid2">
+            <div className="stat"><b className="num">{r0(n.kcal)}</b><span>kcal (estimate)</span></div>
+            <div className="stat"><b className="num">{r0(n.protein)} g</b><span>Protein</span></div>
+            <div className="stat"><b className="num">{r0(n.carbs)} g</b><span>Carbs</span></div>
+            <div className="stat"><b className="num">{r0(n.fat)} g</b><span>Fat</span></div>
+          </div>
+          <button
+            className="link-btn"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => setOwn({ kcal: String(r0(est0.kcal)), protein: String(r0(est0.protein)), carbs: String(r0(est0.carbs)), fat: String(r0(est0.fat)) })}
+          >
+            <Icon name="edit" size={14} /> Know the real numbers? Enter them
+          </button>
         </div>
       )}
 
       <Seg value={slot} onChange={setSlot} options={MEAL_SLOTS.map((m) => ({ value: m.id, label: m.label }))} />
       <button
         className="btn block"
-        disabled={!kept.length}
+        disabled={!kept.length || (!!own && n.kcal <= 0)}
         onClick={() => {
           addLog({
             date,
             slot,
             name: name.trim() || 'Meal',
-            amount: `${portion === 1 ? '' : `${portion}× `}estimate`,
+            amount: own ? 'your numbers' : `${portion === 1 ? '' : `${portion}× `}estimate`,
             ...n,
             items: kept.map((it) => ({ name: it.name, amount: portion === 1 ? it.amount : `${portion}× ${it.amount}`, kcal: it.kcal * portion, protein: it.protein * portion, carbs: it.carbs * portion, fat: it.fat * portion })),
           });
@@ -227,8 +250,64 @@ export function EstimateResult({ est, date, slot, setSlot, onDone, onRetry }: { 
   );
 }
 
+type Macros = { kcal: string; protein: string; carbs: string; fat: string };
+
+function MacroInputs({ value, onChange }: { value: Macros; onChange: (m: Macros) => void }) {
+  return (
+    <div className="grid2">
+      <NumField label="Calories" value={value.kcal} onChange={(v) => onChange({ ...value, kcal: v })} suffix="kcal" />
+      <NumField label="Protein" value={value.protein} onChange={(v) => onChange({ ...value, protein: v })} suffix="g" />
+      <NumField label="Carbs" value={value.carbs} onChange={(v) => onChange({ ...value, carbs: v })} suffix="g" />
+      <NumField label="Fat" value={value.fat} onChange={(v) => onChange({ ...value, fat: v })} suffix="g" />
+    </div>
+  );
+}
+
+/** Log a meal with calories and macros you already know (from a menu, app or label). */
+function KnownNumbers({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
+  const [name, setName] = useState('');
+  const [m, setM] = useState<Macros>({ kcal: '', protein: '', carbs: '', fat: '' });
+  const num = (v: string) => Math.max(0, parseFloat(v) || 0);
+  const kcal = num(m.kcal);
+  const fromMacros = num(m.protein) * 4 + num(m.carbs) * 4 + num(m.fat) * 9;
+  const mismatch = kcal > 0 && fromMacros > 0 && Math.abs(fromMacros - kcal) / kcal > 0.25;
+  return (
+    <div className="stack">
+      <label className="field">
+        What did you eat?
+        <input className="input" placeholder="e.g. Subway 6-inch chicken teriyaki" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <MacroInputs value={m} onChange={setM} />
+      {!kcal && fromMacros > 0 && <div className="hint">No calories entered. We'll use {r0(fromMacros)} kcal worked out from the macros.</div>}
+      {mismatch && <div className="hint">Heads up: those macros add up to about {r0(fromMacros)} kcal, not {r0(kcal)}. Double-check if you can.</div>}
+      <Seg value={slot} onChange={setSlot} options={MEAL_SLOTS.map((x) => ({ value: x.id, label: x.label }))} />
+      <button
+        className="btn block"
+        disabled={!(kcal > 0 || fromMacros > 0)}
+        onClick={() => {
+          addLog({ date, slot, name: name.trim() || 'Meal', amount: 'your numbers', kcal: kcal || fromMacros, protein: num(m.protein), carbs: num(m.carbs), fat: num(m.fat) });
+          toast(`Logged ${name.trim() || 'meal'}`);
+          onDone();
+        }}
+      >
+        Log it
+      </button>
+    </div>
+  );
+}
+
 // ---------- Photo tab ----------
-export function PhotoTab({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
+export function PhotoTab(props: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
+  const [mode, setMode] = useState<'estimate' | 'known'>('estimate');
+  return (
+    <div className="stack">
+      <Seg value={mode} onChange={setMode} options={[{ value: 'estimate', label: 'Estimate from photo' }, { value: 'known', label: 'I know the numbers' }]} />
+      {mode === 'estimate' ? <PhotoEstimate {...props} /> : <KnownNumbers {...props} />}
+    </div>
+  );
+}
+
+function PhotoEstimate({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
   const enabled = useAiEnabled();
   const [image, setImage] = useState<string | null>(null);
   const [desc, setDesc] = useState('');
