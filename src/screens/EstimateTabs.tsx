@@ -97,7 +97,7 @@ export function useEstimateRun(onResult: (e: Estimate) => void) {
 }
 
 // ---------- loading state ----------
-const PHOTO_MSGS = ['Looking at your plate…', 'Spotting each food…', 'Judging portion sizes…', 'Counting the sauces…', 'Adding it all up…'];
+export const PHOTO_MSGS = ['Looking at your plate…', 'Spotting each food…', 'Judging portion sizes…', 'Counting the sauces…', 'Adding it all up…'];
 const OUT_MSGS = ['Checking the menu…', 'Looking up the nutrition…', 'Sizing up the portions…', 'Counting sides and drinks…', 'Adding it all up…'];
 
 export function Estimating({ messages, onCancel }: { messages: string[]; onCancel?: () => void }) {
@@ -264,7 +264,7 @@ function MacroInputs({ value, onChange }: { value: Macros; onChange: (m: Macros)
 }
 
 /** Log a meal with calories and macros you already know (from a menu, app or label). */
-function KnownNumbers({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
+export function KnownNumbers({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
   const [name, setName] = useState('');
   const [m, setM] = useState<Macros>({ kcal: '', protein: '', carbs: '', fat: '' });
   const num = (v: string) => Math.max(0, parseFloat(v) || 0);
@@ -291,80 +291,6 @@ function KnownNumbers({ date, slot, setSlot, onDone }: { date: string; slot: Mea
         }}
       >
         Log it
-      </button>
-    </div>
-  );
-}
-
-// ---------- Photo tab ----------
-export function PhotoTab(props: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
-  const [mode, setMode] = useState<'estimate' | 'known'>('estimate');
-  return (
-    <div className="stack">
-      <Seg value={mode} onChange={setMode} options={[{ value: 'estimate', label: 'Estimate from photo' }, { value: 'known', label: 'I know the numbers' }]} />
-      {mode === 'estimate' ? <PhotoEstimate {...props} /> : <KnownNumbers {...props} />}
-    </div>
-  );
-}
-
-function PhotoEstimate({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
-  const enabled = useAiEnabled();
-  const [image, setImage] = useState<string | null>(null);
-  const [desc, setDesc] = useState('');
-  const [est, setEst] = useState<Estimate | null>(null);
-  const { busy, err, setErr, run, cancel } = useEstimateRun(setEst);
-  const camera = useRef<HTMLInputElement>(null);
-  const library = useRef<HTMLInputElement>(null);
-
-  if (est) return <EstimateResult est={est} date={date} slot={slot} setSlot={setSlot} onDone={onDone} onRetry={() => { setEst(null); setImage(null); setDesc(''); }} />;
-  if (busy) return <Estimating messages={image ? PHOTO_MSGS : OUT_MSGS} onCancel={cancel} />;
-
-  const pick = async (f?: File) => {
-    if (!f) return;
-    setErr('');
-    try {
-      setImage(await resizeImage(f));
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
-  return (
-    <div className="stack">
-      {enabled === false && <NoAi />}
-      {image ? (
-        <div style={{ position: 'relative' }}>
-          <img src={image} alt="Your meal" style={{ width: '100%', borderRadius: 20, display: 'block', maxHeight: 320, objectFit: 'cover' }} />
-          <button className="icon-btn" style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,.55)', color: '#fff' }} onClick={() => setImage(null)} aria-label="Remove photo">
-            <Icon name="x" />
-          </button>
-        </div>
-      ) : (
-        <div className="grid2">
-          <button className="card center" style={{ border: 0, padding: 22 }} onClick={() => camera.current?.click()}>
-            <Icon name="camera" size={30} />
-            <div style={{ fontWeight: 700, marginTop: 6 }}>Take photo</div>
-          </button>
-          <button className="card center" style={{ border: 0, padding: 22, marginTop: 0 }} onClick={() => library.current?.click()}>
-            <Icon name="image" size={30} />
-            <div style={{ fontWeight: 700, marginTop: 6 }}>From gallery</div>
-          </button>
-        </div>
-      )}
-      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
-      <input ref={library} type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
-      <label className="field">
-        Describe it (optional)
-        <textarea className="input" rows={2} placeholder="e.g. half the rice, extra sambal, chicken was skinless" value={desc} onChange={(e) => setDesc(e.target.value)} />
-        <span className="hint">Details the camera can't see (oil, sauces, what's hidden) make the estimate better.</span>
-      </label>
-      {err && <div className="error">{err}</div>}
-      <button
-        className="btn block"
-        disabled={busy || enabled === false || (!image && !desc.trim())}
-        onClick={() => run({ image: image ?? undefined, description: desc, kind: 'photo' })}
-      >
-        <Icon name="sparkle" size={18} /> Estimate
       </button>
     </div>
   );

@@ -76,7 +76,7 @@ interface EstimateRequest {
   image?: string; // data URL (image/jpeg|png|webp)
   description?: string;
   restaurant?: string;
-  kind?: 'photo' | 'restaurant' | 'package' | 'recipe' | 'food';
+  kind?: 'photo' | 'restaurant' | 'package' | 'recipe' | 'food' | 'auto';
   ingredients?: { name: string; qty: number; unit: string }[];
   images?: string[]; // data URLs, used by 'recipe'
 }
@@ -109,6 +109,10 @@ export async function POST(request: Request): Promise<Response> {
     if (!image) return json({ error: 'Take a photo of the packaging first.' }, 400);
     return readPackage(image, description);
   }
+  if (body.kind === 'auto') {
+    if (!image) return json({ error: 'Take a photo first.' }, 400);
+    return autoPhoto(image, description);
+  }
 
   const prompt = [
     'Estimate the nutrition of the food the user ate.',
@@ -118,7 +122,7 @@ export async function POST(request: Request): Promise<Response> {
     'The user is in Malaysia; assume local portion sizes for local dishes (e.g. economy/mixed rice "nasi campur", mamak dishes) unless told otherwise.',
     'Count visible oil, sauces, gravies and drinks if they are part of the meal. If unsure between two sizes, pick the more typical one and say so.',
     'Reply with JSON only, in exactly this shape (numbers, no units in values):',
-    '{"name":"short meal name","items":[{"name":"","amount":"e.g. 1 cup / 1 piece","kcal":0,"protein":0,"carbs":0,"fat":0}],"confidence":"low|medium|high","note":"one short sentence on the main uncertainty"}',
+    MEAL_SHAPE,
     'If there is no food in the image, reply {"error":"No food found in the photo"}.',
   ]
     .filter(Boolean)
@@ -132,16 +136,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const parsed = parseJson(text);
     if (parsed.error) return json({ error: String(parsed.error) }, 422);
-    const items = (Array.isArray(parsed.items) ? parsed.items : []).map((i: Record<string, unknown>) => ({
-      name: String(i.name ?? 'Item'),
-      amount: String(i.amount ?? ''),
-      kcal: Number(i.kcal) || 0,
-      protein: Number(i.protein) || 0,
-      carbs: Number(i.carbs) || 0,
-      fat: Number(i.fat) || 0,
-    }));
-    if (!items.length) return json({ error: "Couldn't estimate that, try adding a description." }, 422);
-    return json({ name: String(parsed.name || 'Meal'), items, confidence: parsed.confidence || 'medium', note: parsed.note || '' });
+    const meal = normalizeMeal(parsed);
+    if (!meal.items.length) return json({ error: "Couldn't estimate that, try adding a description." }, 422);
+    return json(meal);
   } catch {
     return json({ error: 'Could not read the estimate, please try again.' }, 502);
   }
@@ -271,7 +268,7 @@ async function readPackage(image: { mime: string; data: string }, note: string):
     '5. If no nutrition table is visible, estimate typical values for this exact product (or the closest common equivalent) per 100 g and set "source":"estimated".',
     'Energy must be kcal (convert kJ ÷ 4.184 if only kJ is shown).',
     'Reply with JSON only, in exactly this shape (numbers without units):',
-    '{"name":"","brand":"","barcode":"","per":"100g|serving","servingG":0,"servingLabel":"e.g. 1 bar (40 g)","kcal":0,"protein":0,"carbs":0,"fat":0,"source":"label|estimated","note":"one short sentence"}',
+    PACKAGE_SHAPE,
     'If the photo is not of a food or drink product, reply {"error":"Couldn\'t see a food package in the photo"}.',
   ]
     .filter(Boolean)
@@ -285,26 +282,82 @@ async function readPackage(image: { mime: string; data: string }, note: string):
   try {
     const p = parseJson(text);
     if (p.error) return json({ error: String(p.error) }, 422);
-    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-    const barcode = String(p.barcode ?? '').replace(/\D/g, '');
-    const product = {
-      name: String(p.name || 'Packaged food').slice(0, 120),
-      brand: p.brand ? String(p.brand).slice(0, 80) : undefined,
-      barcode: barcode.length >= 8 ? barcode : undefined,
-      per: p.per === 'serving' ? 'serving' : '100g',
-      servingG: n(p.servingG) || undefined,
-      servingLabel: p.servingLabel ? String(p.servingLabel).slice(0, 60) : undefined,
-      kcal: n(p.kcal),
-      protein: n(p.protein),
-      carbs: n(p.carbs),
-      fat: n(p.fat),
-      source: p.source === 'label' ? 'label' : 'estimated',
-      note: p.note ? String(p.note).slice(0, 200) : '',
-    };
+    const product = normalizeProduct(p);
     if (!product.kcal && !product.protein && !product.carbs && !product.fat) return json({ error: "Couldn't read the nutrition. Try a clearer photo of the label." }, 422);
     return json({ product });
   } catch {
     return json({ error: 'Could not read the package, please try again.' }, 502);
+  }
+}
+
+const MEAL_SHAPE = '{"name":"short meal name","items":[{"name":"","amount":"e.g. 1 cup / 1 piece","kcal":0,"protein":0,"carbs":0,"fat":0}],"confidence":"low|medium|high","note":"one short sentence on the main uncertainty"}';
+const PACKAGE_SHAPE = '{"name":"","brand":"","barcode":"","per":"100g|serving","servingG":0,"servingLabel":"e.g. 1 bar (40 g)","kcal":0,"protein":0,"carbs":0,"fat":0,"source":"label|estimated","note":"one short sentence"}';
+
+function normalizeMeal(parsed: Record<string, unknown>) {
+  const items = (Array.isArray(parsed.items) ? parsed.items : []).map((i: Record<string, unknown>) => ({
+    name: String(i.name ?? 'Item'),
+    amount: String(i.amount ?? ''),
+    kcal: Number(i.kcal) || 0,
+    protein: Number(i.protein) || 0,
+    carbs: Number(i.carbs) || 0,
+    fat: Number(i.fat) || 0,
+  }));
+  return { name: String(parsed.name || 'Meal'), items, confidence: (parsed.confidence as string) || 'medium', note: (parsed.note as string) || '' };
+}
+
+function normalizeProduct(p: Record<string, unknown>) {
+  const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const barcode = String(p.barcode ?? '').replace(/\D/g, '');
+  return {
+    name: String(p.name || 'Packaged food').slice(0, 120),
+    brand: p.brand ? String(p.brand).slice(0, 80) : undefined,
+    barcode: barcode.length >= 8 ? barcode : undefined,
+    per: p.per === 'serving' ? 'serving' : '100g',
+    servingG: n(p.servingG) || undefined,
+    servingLabel: p.servingLabel ? String(p.servingLabel).slice(0, 60) : undefined,
+    kcal: n(p.kcal),
+    protein: n(p.protein),
+    carbs: n(p.carbs),
+    fat: n(p.fat),
+    source: p.source === 'label' ? 'label' : 'estimated',
+    note: p.note ? String(p.note).slice(0, 200) : '',
+  };
+}
+
+/** One photo, anything: a packaged product (read its label) or a meal (estimate what's on the plate). */
+async function autoPhoto(image: Img, note: string): Promise<Response> {
+  const prompt = [
+    'Look at this photo and decide which it shows:',
+    '- "package": a packaged food or drink product (wrapper, box, bottle, can, or its label / nutrition table).',
+    '- "meal": food that is plated, served, cooked or ready to eat (including takeaway food out of its box).',
+    note ? `User note: ${note}` : '',
+    'If "package": read the product name and brand; copy the nutrition table exactly if visible (prefer per 100 g / 100 ml, else per serving); read the serving size; copy barcode digits if printed. If no table is visible, estimate typical values per 100 g and set "source":"estimated". Energy in kcal (kJ ÷ 4.184).',
+    `  Reply: {"type":"package",${PACKAGE_SHAPE.slice(1)}`,
+    'If "meal": identify each food and estimate portion sizes from the photo (plate size, utensils help with scale). The user is in Malaysia; assume local portions for local dishes. Count visible oil, sauces, gravies and drinks.',
+    `  Reply: {"type":"meal",${MEAL_SHAPE.slice(1)}`,
+    'Reply with JSON only (numbers without units). If there is no food or drink in the photo, reply {"error":"No food found in the photo"}.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  let text: string;
+  try {
+    text = await askAi(prompt, image, 1200);
+  } catch (e) {
+    return json({ error: (e as Error).message }, e instanceof AiError ? e.status : 502);
+  }
+  try {
+    const p = parseJson(text);
+    if (p.error) return json({ error: String(p.error) }, 422);
+    if (p.type === 'package' || (!Array.isArray(p.items) && p.kcal !== undefined)) {
+      const product = normalizeProduct(p);
+      if (!product.kcal && !product.protein && !product.carbs && !product.fat) return json({ error: "Couldn't read the nutrition. Try a clearer photo of the label." }, 422);
+      return json({ type: 'package', product });
+    }
+    const meal = normalizeMeal(p);
+    if (!meal.items.length) return json({ error: "Couldn't estimate that, try adding a description." }, 422);
+    return json({ type: 'meal', ...meal });
+  } catch {
+    return json({ error: 'Could not read the photo, please try again.' }, 502);
   }
 }
 
