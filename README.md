@@ -67,7 +67,7 @@ public/                 Icons and manifest
 scripts/check-calc.ts   Sanity checks for the maths
 src/lib/calc.ts         BMR/TDEE, body fat, safety rules, dynamic weight model, macros
 src/lib/store.ts        Local state + persistence
-src/lib/foodApi.ts      Open Food Facts search + barcode lookup
+src/lib/foodApi.ts      Open Food Facts search + Gemini food lookup
 src/lib/recipes.ts      Built-in recipe library and pantry matching
 src/screens/            Onboarding, PlanPicker, Today, AddFood, Kitchen, Progress, Settings
 ```
