@@ -63,7 +63,7 @@ export function NoAi() {
   return (
     <div className="callout warn small">
       AI estimates aren't switched on yet. Add <b>GEMINI_API_KEY</b> (free from Google AI Studio) in your Vercel project (Settings → Environment Variables) and redeploy.
-      Until then, use Search or Quick add.
+      Until then, use Search or Create → Just numbers.
     </div>
   );
 }

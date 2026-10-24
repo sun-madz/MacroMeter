@@ -1,4 +1,4 @@
-// Open Food Facts: free, open barcode + food database (no API key needed).
+// Open Food Facts: free, open food database (no API key needed).
 import type { Food } from './store';
 
 const FIELDS = 'code,product_name,product_name_en,brands,nutriments,serving_size,serving_quantity';
@@ -39,15 +39,6 @@ function toFood(p: OffProduct): Food | null {
     servingLabel: p.serving_size || undefined,
     source: 'openfoodfacts',
   };
-}
-
-export async function lookupBarcode(code: string): Promise<Food | null> {
-  const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Food database error (${res.status})`);
-  const data = await res.json();
-  if (data.status !== 1 || !data.product) return null;
-  return toFood({ ...data.product, code });
 }
 
 export async function searchFoods(query: string, signal?: AbortSignal): Promise<Food[]> {

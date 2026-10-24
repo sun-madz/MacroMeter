@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { askAiForFood, lookupBarcode, searchFoods } from '../lib/foodApi';
+import { askAiForFood, searchFoods } from '../lib/foodApi';
 import { searchCommon } from '../lib/commonFoods';
 import {
   MEAL_SLOTS,
@@ -16,12 +16,11 @@ import {
   type MealSlot,
   type Nutrition,
 } from '../lib/store';
-import { Scanner as BarcodeScanner } from '../components/Scanner';
-import { EatingOutTab, EstimateResult, Estimating, KnownNumbers, PHOTO_MSGS, resizeImage, useAiEnabled, type Estimate } from './EstimateTabs';
+import { EatingOutTab, KnownNumbers } from './EstimateTabs';
 import { MixBuilder } from './MixBuilder';
 import { FillDot, Icon, NumField, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
 
-export type Tab = 'search' | 'scan' | 'photo' | 'out' | 'mine' | 'quick' | 'create';
+export type Tab = 'search' | 'out' | 'mine' | 'quick' | 'create';
 
 interface Props {
   mode: 'log' | 'ingredient';
@@ -50,10 +49,9 @@ export function mealToFood(m: Meal): Food {
 
 export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', onClose, onIngredient }: Props) {
   const s = useStore();
-  const [tab, setTab] = useState<Tab>(startTab === 'photo' ? 'scan' : startTab);
+  const [tab, setTab] = useState<Tab>(mode === 'ingredient' && startTab === 'create' ? 'search' : startTab);
   const [picked, setPicked] = useState<Food | null>(null);
   const [slot, setSlot] = useState<MealSlot>(initialSlot ?? guessSlot());
-  const [pendingBarcode, setPendingBarcode] = useState<string | undefined>();
   const target = s.plan?.kcal ?? 2000;
   const intuitive = s.settings.intuitive;
 
@@ -73,9 +71,8 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', on
   };
 
   const tabs: { value: Tab; label: string }[] = [
-    { value: 'create', label: 'Create' },
+    ...(mode === 'log' ? ([{ value: 'create', label: 'Create' }] as { value: Tab; label: string }[]) : []),
     { value: 'search', label: 'Search' },
-    { value: 'scan', label: 'Scan' },
     ...(mode === 'log'
       ? ([
           { value: 'out', label: 'Eating out' },
@@ -109,39 +106,11 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', on
             ))}
           </div>
           {tab === 'search' && <SearchTab onPick={setPicked} intuitive={intuitive} target={target} />}
-          {tab === 'scan' && (
-            <ScanTab
-              mode={mode}
-              initial={startTab === 'photo' ? 'photo' : 'live'}
-              date={date}
-              slot={slot}
-              setSlot={setSlot}
-              onDone={onClose}
-              onFound={setPicked}
-              onMissing={(code) => {
-                setPendingBarcode(code);
-                setTab('create');
-                toast('Not in the database yet. Add it once and it will be remembered.');
-              }}
-            />
-          )}
           {tab === 'out' && <EatingOutTab date={date!} slot={slot} setSlot={setSlot} onDone={onClose} />}
           {tab === 'mine' && <MineTab onPick={setPicked} intuitive={intuitive} target={target} />}
           {tab === 'quick' && mode === 'ingredient' && <ManualIngredient onAdd={(ing) => { onIngredient?.(ing); onClose(); }} />}
           {tab === 'create' && (
-            <CreateTab
-              mode={mode}
-              date={date}
-              slot={slot}
-              setSlot={setSlot}
-              onDone={onClose}
-              barcode={pendingBarcode}
-              onMix={(meal) => setPicked(mealToFood(meal))}
-              onCreated={(f) => {
-                setState((st) => ({ ...st, foods: [f, ...st.foods] }));
-                setPicked(f);
-              }}
-            />
+            <CreateTab date={date} slot={slot} setSlot={setSlot} onDone={onClose} onMix={(meal) => setPicked(mealToFood(meal))} />
           )}
         </div>
       )}
@@ -295,185 +264,6 @@ function SearchTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; i
   );
 }
 
-function ScanTab({ mode, initial, date, slot, setSlot, onDone, onFound, onMissing }: { mode: 'log' | 'ingredient'; initial: 'live' | 'photo'; date?: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void; onFound: (f: Food) => void; onMissing: (code: string) => void }) {
-  const [view, setView] = useState<'live' | 'photo'>(initial);
-  return (
-    <div className="stack">
-      <Seg value={view} onChange={setView} options={[{ value: 'live', label: 'Barcode' }, { value: 'photo', label: 'Photo' }]} />
-      {view === 'live' ? <LiveBarcode onFound={onFound} onMissing={onMissing} /> : <SnapPhoto mode={mode} date={date} slot={slot} setSlot={setSlot} onDone={onDone} onFound={onFound} />}
-    </div>
-  );
-}
-
-function LiveBarcode({ onFound, onMissing }: { onFound: (f: Food) => void; onMissing: (code: string) => void }) {
-  const s = useStore();
-  const [status, setStatus] = useState<'scanning' | 'looking' | 'error'>('scanning');
-  const [msg, setMsg] = useState('');
-  const [key, setKey] = useState(0);
-
-  const handle = async (code: string) => {
-    const known = s.foods.find((f) => f.barcode === code);
-    if (known) return onFound(known);
-    setStatus('looking');
-    try {
-      const f = await lookupBarcode(code);
-      if (f) onFound(f);
-      else onMissing(code);
-    } catch {
-      setStatus('error');
-      setMsg(`Couldn't reach the food database for ${code}.`);
-    }
-  };
-
-  if (status === 'looking') return <div className="empty">Looking up product…</div>;
-  if (status === 'error')
-    return (
-      <div className="stack">
-        <div className="callout warn">{msg}</div>
-        <button className="btn ghost" onClick={() => { setStatus('scanning'); setKey(key + 1); }}>Scan again</button>
-      </div>
-    );
-  return (
-    <div className="stack">
-      <BarcodeScanner key={key} onDetect={handle} />
-      <p className="hint center" style={{ margin: 0 }}>Point at the barcode on the pack. No barcode? Use Package photo.</p>
-    </div>
-  );
-}
-
-const PACKAGE_MSGS = ['Looking for a barcode…', 'Reading the label…', 'Finding the nutrition table…', 'Checking serving size…', 'Almost there…'];
-
-/** One photo of anything: a barcode in shot is used first, otherwise Gemini reads the
- *  package label or estimates the meal on the plate. (Ingredient mode: packages only.) */
-function SnapPhoto({ mode, date, slot, setSlot, onDone, onFound }: { mode: 'log' | 'ingredient'; date?: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void; onFound: (f: Food) => void }) {
-  const s = useStore();
-  const enabled = useAiEnabled();
-  const [file, setFile] = useState<File | null>(null);
-  const [image, setImage] = useState<string | null>(null);
-  const [desc, setDesc] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const [meal, setMeal] = useState<Estimate | null>(null);
-  const camera = useRef<HTMLInputElement>(null);
-  const library = useRef<HTMLInputElement>(null);
-  const cancelled = useRef(false);
-
-  const pick = async (f?: File) => {
-    if (!f) return;
-    setErr('');
-    try {
-      setImage(await resizeImage(f, 1600));
-      setFile(f);
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
-  const go = async () => {
-    if (!file || !image) return;
-    cancelled.current = false;
-    setErr('');
-    setBusy(true);
-    try {
-      // 1. A barcode in the photo is the most accurate route.
-      const { barcodeFromFile } = await import('../lib/imageBarcode');
-      const code = await barcodeFromFile(file);
-      if (cancelled.current) return;
-      if (code) {
-        const known = s.foods.find((f) => f.barcode === code);
-        if (known) return onFound(known);
-        const f = await lookupBarcode(code).catch(() => null);
-        if (cancelled.current) return;
-        if (f) {
-          toast('Found by barcode');
-          return onFound(f);
-        }
-      }
-      // 2. Otherwise Gemini works out whether it's a package or a meal.
-      const res = await fetch('/api/estimate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: mode === 'log' ? 'auto' : 'package', image, description: desc }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (cancelled.current) return;
-      if (!res.ok) {
-        if (res.status === 404 || res.status === 503) throw new Error("No barcode found, and AI photo reading isn't set up (add GEMINI_API_KEY in Vercel).");
-        throw new Error(d.error || `Couldn't read the photo (${res.status})`);
-      }
-      if (d.type === 'meal') {
-        setMeal({ name: d.name, items: d.items, confidence: d.confidence, note: d.note });
-        return;
-      }
-      const p = d.product;
-      toast(p.source === 'label' ? 'Read from the nutrition label' : 'No label visible, values are estimated');
-      onFound({
-        id: `pkg-${uid()}`,
-        name: p.name,
-        brand: p.brand,
-        barcode: p.barcode || code || undefined,
-        per: p.per,
-        servingG: p.servingG,
-        servingLabel: p.servingLabel,
-        kcal: p.kcal,
-        protein: p.protein,
-        carbs: p.carbs,
-        fat: p.fat,
-        source: 'custom',
-      });
-    } catch (e) {
-      if (!cancelled.current) setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (meal) return <EstimateResult est={meal} date={date!} slot={slot} setSlot={setSlot} onDone={onDone} onRetry={() => { setMeal(null); setImage(null); setFile(null); setDesc(''); }} />;
-  if (busy) return <Estimating messages={mode === 'log' ? ['Looking for a barcode…', ...PHOTO_MSGS] : PACKAGE_MSGS} onCancel={() => { cancelled.current = true; setBusy(false); }} />;
-
-  return (
-    <div className="stack">
-      {image ? (
-        <div style={{ position: 'relative' }}>
-          <img src={image} alt="Your photo" style={{ width: '100%', borderRadius: 20, display: 'block', maxHeight: 320, objectFit: 'cover' }} />
-          <button className="icon-btn" style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,.55)', color: '#fff' }} onClick={() => { setImage(null); setFile(null); }} aria-label="Remove photo">
-            <Icon name="x" />
-          </button>
-        </div>
-      ) : (
-        <div className="grid2">
-          <button className="card center" style={{ border: 0, padding: 22 }} onClick={() => camera.current?.click()}>
-            <Icon name="camera" size={30} />
-            <div style={{ fontWeight: 700, marginTop: 6 }}>Take photo</div>
-          </button>
-          <button className="card center" style={{ border: 0, padding: 22, marginTop: 0 }} onClick={() => library.current?.click()}>
-            <Icon name="image" size={30} />
-            <div style={{ fontWeight: 700, marginTop: 6 }}>From gallery</div>
-          </button>
-        </div>
-      )}
-      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
-      <input ref={library} type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
-      <p className="hint" style={{ margin: 0 }}>
-        {mode === 'log'
-          ? 'Snap a meal or a package. A barcode in shot is used first; otherwise the label is read or the plate is estimated.'
-          : 'Snap the pack or its nutrition label. A barcode in shot is used first.'}
-      </p>
-      {mode === 'log' && (
-        <label className="field">
-          Describe it (optional)
-          <textarea className="input" rows={2} placeholder="e.g. half the rice, extra sambal, chicken was skinless" value={desc} onChange={(e) => setDesc(e.target.value)} />
-        </label>
-      )}
-      {enabled === false && <div className="hint">Barcodes in photos work without AI. Reading labels and plates needs GEMINI_API_KEY in Vercel.</div>}
-      {err && <div className="callout warn small">{err}</div>}
-      <button className="btn block" disabled={!image} onClick={go}>
-        <Icon name="sparkle" size={18} /> {mode === 'log' ? 'Estimate' : 'Read package'}
-      </button>
-    </div>
-  );
-}
-
 function MineTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; intuitive: boolean; target: number }) {
   const s = useStore();
   const recent = s.recentFoodIds.map((id) => s.foods.find((f) => f.id === id)).filter((f): f is Food => !!f && f.source !== 'meal');
@@ -621,74 +411,20 @@ function ManualIngredient({ onAdd }: { onAdd: (i: Ingredient) => void }) {
   );
 }
 
-function CreateTab({ mode, date, slot, setSlot, onDone, barcode, onMix, onCreated }: { mode: 'log' | 'ingredient'; date?: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void; barcode?: string; onMix: (m: Meal) => void; onCreated: (f: Food) => void }) {
-  // A scanned-but-unknown barcode goes straight to the label form.
-  const [kind, setKind] = useState<'mix' | 'label' | 'numbers'>(mode === 'log' && !barcode ? 'mix' : 'label');
+function CreateTab({ date, slot, setSlot, onDone, onMix }: { date?: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void; onMix: (m: Meal) => void }) {
+  const [kind, setKind] = useState<'mix' | 'numbers'>('mix');
   return (
     <div className="stack">
-      {mode === 'log' && (
-        <Seg
-          value={kind}
-          onChange={setKind}
-          options={[
-            { value: 'mix', label: 'I made it' },
-            { value: 'label', label: 'From a label' },
-            { value: 'numbers', label: 'Just numbers' },
-          ]}
-        />
-      )}
-      {kind === 'mix' && <MixBuilder onSaved={onMix} />}
-      {kind === 'label' && <CreateFood barcode={barcode} onCreated={onCreated} />}
-      {kind === 'numbers' && <KnownNumbers date={date!} slot={slot} setSlot={setSlot} onDone={onDone} />}
+      <Seg
+        value={kind}
+        onChange={setKind}
+        options={[
+          { value: 'mix', label: 'I made it' },
+          { value: 'numbers', label: 'Just numbers' },
+        ]}
+      />
+      {kind === 'mix' ? <MixBuilder onSaved={onMix} /> : <KnownNumbers date={date!} slot={slot} setSlot={setSlot} onDone={onDone} />}
     </div>
   );
 }
 
-function CreateFood({ barcode, onCreated }: { barcode?: string; onCreated: (f: Food) => void }) {
-  const [name, setName] = useState('');
-  const [brand, setBrand] = useState('');
-  const [per, setPer] = useState<'100g' | 'serving'>('100g');
-  const [servingG, setServingG] = useState('');
-  const [kcal, setKcal] = useState('');
-  const [p, setP] = useState('');
-  const [c, setC] = useState('');
-  const [f, setF] = useState('');
-  const ok = name.trim() && parseFloat(kcal) >= 0 && kcal !== '';
-  return (
-    <div className="stack">
-      {barcode && <div className="chip">Barcode {barcode}</div>}
-      <input className="input" placeholder="Food name" value={name} onChange={(e) => setName(e.target.value)} />
-      <input className="input" placeholder="Brand (optional)" value={brand} onChange={(e) => setBrand(e.target.value)} />
-      <Seg value={per} onChange={setPer} options={[{ value: '100g', label: 'Per 100 g' }, { value: 'serving', label: 'Per serving' }]} />
-      <p className="hint" style={{ margin: 0 }}>Copy the numbers from the nutrition label.</p>
-      <div className="grid2">
-        <NumField label="Calories" value={kcal} onChange={setKcal} suffix="kcal" />
-        <NumField label={per === 'serving' ? 'Serving size' : 'Usual serving'} value={servingG} onChange={setServingG} suffix="g" hint="Optional" />
-        <NumField label="Protein" value={p} onChange={setP} suffix="g" />
-        <NumField label="Carbs" value={c} onChange={setC} suffix="g" />
-        <NumField label="Fat" value={f} onChange={setF} suffix="g" />
-      </div>
-      <button
-        className="btn block"
-        disabled={!ok}
-        onClick={() =>
-          onCreated({
-            id: `custom-${uid()}`,
-            name: name.trim(),
-            brand: brand.trim() || undefined,
-            barcode,
-            per,
-            servingG: parseFloat(servingG) || undefined,
-            kcal: +kcal || 0,
-            protein: +p || 0,
-            carbs: +c || 0,
-            fat: +f || 0,
-            source: 'custom',
-          })
-        }
-      >
-        Save food
-      </button>
-    </div>
-  );
-}

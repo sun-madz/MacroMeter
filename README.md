@@ -13,15 +13,13 @@ A calm, safe calorie-deficit and macro tracker. React + Vite, deployed on Vercel
   - Time to goal from a dynamic model after Kevin Hall (NIH): fat and lean mass tracked separately, expenditure falls as you lose weight, plus adaptive thermogenesis. Reproduces fatcalc's worked example (~70 weeks). Run `npm run test:calc` to check.
 - **Macros** after picking a deficit: Higher protein (30/45/25), Balanced (20/50/30), Lower carb (35/30/35) or custom.
 - **Intuitive eating mode** (Settings): hides all calorie numbers. The day shows as a filling circle with protein/carbs/fat circles, each food shows a small fill dot, and quick add works by portion size.
-- **Barcode scanner** for snacks and ingredients (camera, works on iPhone and Android over https), with product data from [Open Food Facts](https://world.openfoodfacts.org). Unknown barcodes can be added once and are remembered.
-- **Create → I made it / From a label / Just numbers** (type calories and macros you already know).
-- **Create → I made it**: name a smoothie, shake or snack, list ingredients with an amount and unit (g, ml, tsp, tbsp, cup, scoop, piece…), and get per-ingredient and per-serving nutrition. Add up to 4 photos (packs, nutrition labels, the finished dish) and Gemini reads the labels for exact numbers, or works out the ingredients itself if you leave the list empty. It's saved to your meals for re-logging or sending to the cookbook. **From a label** keeps the manual nutrition-label form.
+- **Create → I made it / Just numbers** (type calories and macros you already know).
+- **Create → I made it**: name a smoothie, shake or snack, list ingredients with an amount and unit (g, ml, tsp, tbsp, cup, scoop, piece…), and get per-ingredient and per-serving nutrition. Add up to 4 photos (packs, nutrition labels, the finished dish) and Gemini reads the labels for exact numbers, or works out the ingredients itself if you leave the list empty. It's saved to your meals for re-logging or sending to the cookbook.
 - **Search**: ~100 everyday foods built in (instant, offline, per-portion e.g. "1 large egg"), packaged products from Open Food Facts via a server-side search with a backup source, and "Ask Gemini" for anything else.
-- **Scan**: *Barcode* (live camera) or *Photo* — one photo of anything: a barcode in shot is looked up first; otherwise Gemini reads the package label or estimates the meal on the plate.
 - **Eating out**: describe a restaurant or takeaway order (Taco Bell, McDonald's, mamak…) including mixed rice stalls, with an optional photo for an AI estimate that uses chains' published nutrition where known.
 - **Plan start date** in Settings: progress, start weight and the chart are measured from it.
 - **Kitchen**
-  - *On hand*: list ingredients you have (type or scan)
+  - *On hand*: list ingredients you have
   - *Ideas*: menu suggestions from a built-in recipe library ranked by what you have and what fits your remaining day; optional AI chef (see below)
   - *Cook*: build a meal ingredient-by-ingredient while cooking, set servings, log a serving
   - *Saved meals*: re-log or edit meals

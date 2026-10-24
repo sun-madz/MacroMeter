@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { macrosFor, todayKey } from '../lib/calc';
 import { cookbookReady, sendToCookbook } from '../lib/cookbook';
-import { lookupBarcode } from '../lib/foodApi';
 import { matchRecipes, type Recipe } from '../lib/recipes';
 import { addLog, logsFor, setState, sumNutrition, uid, useStore, type Ingredient, type Meal, type MealSlot, type Nutrition } from '../lib/store';
-import { Scanner as BarcodeScanner } from '../components/Scanner';
-import { FillDot, Icon, Sheet, r0, toast } from '../components/ui';
+import { FillDot, Icon, r0, toast } from '../components/ui';
 import { AddFood } from './AddFood';
 import { Estimating } from './EstimateTabs';
 
@@ -67,8 +65,6 @@ export function Kitchen({ goSettings }: { goSettings: () => void }) {
 function Pantry({ goMenus }: { goMenus: () => void }) {
   const s = useStore();
   const [text, setText] = useState('');
-  const [scan, setScan] = useState(false);
-  const [scanNote, setScanNote] = useState('');
   const has = (n: string) => s.pantry.some((p) => p.name.toLowerCase() === n.toLowerCase());
 
   const add = (names: string[]) => {
@@ -92,9 +88,6 @@ function Pantry({ goMenus }: { goMenus: () => void }) {
         >
           <input className="input grow" placeholder="e.g. chicken, rice, spinach" value={text} onChange={(e) => setText(e.target.value)} />
           <button className="icon-btn" style={{ width: 48, height: 48 }} aria-label="Add"><Icon name="plus" /></button>
-          <button type="button" className="icon-btn" style={{ width: 48, height: 48 }} aria-label="Scan to add" onClick={() => { setScan(true); setScanNote(''); }}>
-            <Icon name="barcode" />
-          </button>
         </form>
         {s.pantry.length ? (
           <div className="row wrap" style={{ gap: 8 }}>
@@ -125,29 +118,6 @@ function Pantry({ goMenus }: { goMenus: () => void }) {
         </div>
       </div>
 
-      {scan && (
-        <Sheet title="Scan to add" onClose={() => setScan(false)}>
-          {scanNote ? (
-            <div className="callout">{scanNote}</div>
-          ) : (
-            <BarcodeScanner
-              onDetect={async (code) => {
-                setScanNote('Looking it up…');
-                try {
-                  const f = await lookupBarcode(code);
-                  if (f) {
-                    add([f.name]);
-                    toast(`Added ${f.name}`);
-                    setScan(false);
-                  } else setScanNote(`Product ${code} isn't in the database. Type its name in the box instead.`);
-                } catch {
-                  setScanNote('Could not reach the food database. Type the name instead.');
-                }
-              }}
-            />
-          )}
-        </Sheet>
-      )}
     </div>
   );
 }
@@ -363,7 +333,7 @@ const ingLine = (i: Ingredient) => [i.amount, i.name].filter(Boolean).join(' ');
 
 function MealBuilder({ meal, setMeal, goSettings, onSaved }: { meal: Meal; setMeal: (m: Meal) => void; goSettings: () => void; onSaved: () => void }) {
   const s = useStore();
-  const [adding, setAdding] = useState<null | 'search' | 'scan'>(null);
+  const [adding, setAdding] = useState<null | 'search'>(null);
   const total = sumNutrition(meal.ingredients);
   const per = meal.servings > 0 ? meal.servings : 1;
   const target = s.plan!.kcal;
@@ -394,7 +364,6 @@ function MealBuilder({ meal, setMeal, goSettings, onSaved }: { meal: Meal; setMe
       <div className="section-title" style={{ marginTop: 6 }}>
         <h3>Ingredients</h3>
         <div className="row">
-          <button className="btn sm ghost" onClick={() => setAdding('scan')}><Icon name="barcode" size={16} /> Scan</button>
           <button className="btn sm" onClick={() => setAdding('search')}><Icon name="plus" size={16} /> Add</button>
         </div>
       </div>
