@@ -16,11 +16,11 @@ import {
   type MealSlot,
   type Nutrition,
 } from '../lib/store';
-import { EatingOutTab, KnownNumbers } from './EstimateTabs';
+import { KnownNumbers } from './EstimateTabs';
 import { MixBuilder } from './MixBuilder';
 import { FillDot, Icon, NumField, Seg, Sheet, portionWord, r0, r1, toast } from '../components/ui';
 
-export type Tab = 'search' | 'out' | 'mine' | 'quick' | 'create';
+export type Tab = 'search' | 'mine' | 'quick' | 'create';
 
 interface Props {
   mode: 'log' | 'ingredient';
@@ -73,11 +73,6 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', on
   const tabs: { value: Tab; label: string }[] = [
     ...(mode === 'log' ? ([{ value: 'create', label: 'Create' }] as { value: Tab; label: string }[]) : []),
     { value: 'search', label: 'Search' },
-    ...(mode === 'log'
-      ? ([
-          { value: 'out', label: 'Eating out' },
-        ] as { value: Tab; label: string }[])
-      : []),
     { value: 'mine', label: 'My foods' },
     ...(mode === 'ingredient' ? ([{ value: 'quick', label: 'Manual' }] as { value: Tab; label: string }[]) : []),
   ];
@@ -106,7 +101,6 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', on
             ))}
           </div>
           {tab === 'search' && <SearchTab onPick={setPicked} intuitive={intuitive} target={target} />}
-          {tab === 'out' && <EatingOutTab date={date!} slot={slot} setSlot={setSlot} onDone={onClose} />}
           {tab === 'mine' && <MineTab onPick={setPicked} intuitive={intuitive} target={target} />}
           {tab === 'quick' && mode === 'ingredient' && <ManualIngredient onAdd={(ing) => { onIngredient?.(ing); onClose(); }} />}
           {tab === 'create' && (

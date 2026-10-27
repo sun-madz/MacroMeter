@@ -98,7 +98,6 @@ export function useEstimateRun(onResult: (e: Estimate) => void) {
 
 // ---------- loading state ----------
 export const PHOTO_MSGS = ['Looking at your plate…', 'Spotting each food…', 'Judging portion sizes…', 'Counting the sauces…', 'Adding it all up…'];
-const OUT_MSGS = ['Checking the menu…', 'Looking up the nutrition…', 'Sizing up the portions…', 'Counting sides and drinks…', 'Adding it all up…'];
 
 export function Estimating({ messages, onCancel }: { messages: string[]; onCancel?: () => void }) {
   const [i, setI] = useState(0);
@@ -291,62 +290,6 @@ export function KnownNumbers({ date, slot, setSlot, onDone }: { date: string; sl
         }}
       >
         Log it
-      </button>
-    </div>
-  );
-}
-
-// ---------- Eating out tab ----------
-export function EatingOutTab(props: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
-  return <Describe {...props} />;
-}
-
-const PLACES = ['Taco Bell', "McDonald's", 'KFC', 'Subway', 'Mamak', 'Mixed rice (nasi campur)', 'Starbucks', 'Pizza Hut', 'Nando’s', 'Tealive'];
-
-function Describe({ date, slot, setSlot, onDone }: { date: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void }) {
-  const enabled = useAiEnabled();
-  const [place, setPlace] = useState('');
-  const [order, setOrder] = useState('');
-  const [image, setImage] = useState<string | null>(null);
-  const [est, setEst] = useState<Estimate | null>(null);
-  const { busy, err, run, cancel } = useEstimateRun(setEst);
-  const file = useRef<HTMLInputElement>(null);
-
-  if (est) return <EstimateResult est={est} date={date} slot={slot} setSlot={setSlot} onDone={onDone} onRetry={() => setEst(null)} />;
-  if (busy) return <Estimating messages={OUT_MSGS} onCancel={cancel} />;
-
-  return (
-    <div className="stack">
-      {enabled === false && <NoAi />}
-      <label className="field">
-        Where from?
-        <input className="input" list="mm-places" placeholder="e.g. Taco Bell, mamak, Nasi Kandar Pelita" value={place} onChange={(e) => setPlace(e.target.value)} />
-        <datalist id="mm-places">{PLACES.map((p) => <option key={p} value={p} />)}</datalist>
-      </label>
-      <label className="field">
-        What did you have?
-        <textarea className="input" rows={3} placeholder="e.g. Crunchwrap Supreme, 3 soft tacos, medium Pepsi Zero" value={order} onChange={(e) => setOrder(e.target.value)} />
-        <span className="hint">Include sizes, drinks and sides. Chains with published nutrition get their official numbers where known.</span>
-      </label>
-      {image ? (
-        <div className="row">
-          <img src={image} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12 }} />
-          <span className="grow small muted">Photo added</span>
-          <button className="link-btn" onClick={() => setImage(null)}>Remove</button>
-        </div>
-      ) : (
-        <button className="btn outline" onClick={() => file.current?.click()}>
-          <Icon name="camera" size={18} /> Add a photo (optional)
-        </button>
-      )}
-      <input ref={file} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setImage(await resizeImage(f).catch(() => null)); }} />
-      {err && <div className="error">{err}</div>}
-      <button
-        className="btn block"
-        disabled={busy || enabled === false || !order.trim()}
-        onClick={() => run({ restaurant: place, description: order, image: image ?? undefined, kind: 'restaurant' })}
-      >
-        <Icon name="sparkle" size={18} /> Estimate
       </button>
     </div>
   );

@@ -104,7 +104,7 @@ export function Today({ date, setDate, onAdd, goProgress }: { date: string; setD
           [
             ['create', 'pot', 'I made it'],
             ['search', 'search', 'Search food'],
-            ['out', 'store', 'Eating out'],
+            ['mine', 'book', 'My foods'],
           ] as [AddTab, string, string][]
         ).map(([tab, icon, label]) => (
           <button key={tab} className="card center" style={{ border: 0, padding: '14px 8px', marginTop: 0, fontWeight: 700, fontSize: 13 }} onClick={() => onAdd(undefined, tab)}>
