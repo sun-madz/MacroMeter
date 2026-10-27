@@ -131,8 +131,10 @@ export function PlanPicker({ profile, current, onDone, onCancel }: Props) {
           onClick={() =>
             onDone({
               kcal: chosen.kcal,
-              startKg: profile.weightKg,
-              startDate: current && current.startKg === profile.weightKg ? current.startDate : todayKey(),
+              // Recalculating only updates the target; the journey keeps its original start.
+              startKg: current?.startKg ?? profile.weightKg,
+              startDate: current?.startDate ?? todayKey(),
+              calcKg: profile.weightKg,
               macroPreset: preset,
               split,
             })

@@ -70,6 +70,7 @@ export interface Plan {
   kcal: number;
   startKg: number;
   startDate: string;
+  calcKg?: number; // weight the calorie target was last calculated at (recalculating changes this, not the start)
   macroPreset: MacroPreset;
   split: MacroSplit;
 }

@@ -72,7 +72,7 @@ export function Progress({ onRecalc }: { onRecalc: () => void }) {
   const j = useMemo(() => journey(s), [s]);
   const [kg, setKg] = useState('');
   const [date, setDate] = useState(todayKey());
-  const drift = j.current - s.plan!.startKg;
+  const drift = j.current - (s.plan!.calcKg ?? s.plan!.startKg);
 
   const save = () => {
     const v = parseFloat(kg);
@@ -96,7 +96,7 @@ export function Progress({ onRecalc }: { onRecalc: () => void }) {
       {Math.abs(drift) >= 2 && !j.done && (
         <div className="callout warn row" style={{ marginTop: 14 }}>
           <div className="grow small">
-            You're {r1(Math.abs(drift))} kg {drift < 0 ? 'lighter' : 'heavier'} than when this plan was set. Recalculating keeps your target accurate.
+            You're {r1(Math.abs(drift))} kg {drift < 0 ? 'lighter' : 'heavier'} than when your calorie target was set. Recalculating updates the target; your progress and start date stay the same.
           </div>
           <button className="btn sm" onClick={onRecalc}>Recalculate</button>
         </div>
