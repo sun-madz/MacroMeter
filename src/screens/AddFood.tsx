@@ -406,15 +406,15 @@ function ManualIngredient({ onAdd }: { onAdd: (i: Ingredient) => void }) {
 }
 
 function CreateTab({ date, slot, setSlot, onDone, onMix }: { date?: string; slot: MealSlot; setSlot: (s: MealSlot) => void; onDone: () => void; onMix: (m: Meal) => void }) {
-  const [kind, setKind] = useState<'mix' | 'numbers'>('mix');
+  const [kind, setKind] = useState<'mix' | 'numbers'>('numbers');
   return (
     <div className="stack">
       <Seg
         value={kind}
         onChange={setKind}
         options={[
+          { value: 'numbers', label: 'Macros' },
           { value: 'mix', label: 'I made it' },
-          { value: 'numbers', label: 'Just numbers' },
         ]}
       />
       {kind === 'mix' ? <MixBuilder onSaved={onMix} /> : <KnownNumbers date={date!} slot={slot} setSlot={setSlot} onDone={onDone} />}
