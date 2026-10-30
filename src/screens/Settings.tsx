@@ -68,6 +68,30 @@ export function Settings({ onEditProfile, onChangePlan }: { onEditProfile: () =>
           </div>
           <Toggle checked={s.settings.intuitive} onChange={(v) => set({ intuitive: v })} label="Intuitive eating" />
         </div>
+        <div className="row">
+          <div className="grow">
+            <div style={{ fontWeight: 700 }}>Plan check-in notifications</div>
+            <div className="small muted">
+              When your weigh-ins show it's time to ease your deficit, take a break or recalculate, you'll get a notification the next time you open MacroMeter. The check-in card always shows on Today either way.
+            </div>
+            {s.settings.checkinNotify && typeof Notification !== 'undefined' && Notification.permission === 'denied' && (
+              <div className="error" style={{ marginTop: 4 }}>Notifications are blocked for this site. Allow them in your browser's site settings.</div>
+            )}
+          </div>
+          <Toggle
+            checked={s.settings.checkinNotify}
+            label="Plan check-in notifications"
+            onChange={async (v) => {
+              if (!v) return set({ checkinNotify: false });
+              if (typeof Notification === 'undefined') return toast("This browser doesn't support notifications. Add MacroMeter to your home screen and try again.");
+              const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+              if (perm === 'granted') {
+                set({ checkinNotify: true });
+                toast('Check-in notifications on');
+              } else toast('Notifications were not allowed');
+            }}
+          />
+        </div>
         <div>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Appearance</div>
           <Seg value={s.settings.theme} onChange={(v) => set({ theme: v })} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />

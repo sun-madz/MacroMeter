@@ -135,6 +135,7 @@ export function PlanPicker({ profile, current, onDone, onCancel }: Props) {
               startKg: current?.startKg ?? profile.weightKg,
               startDate: current?.startDate ?? todayKey(),
               calcKg: profile.weightKg,
+              calcDate: todayKey(),
               macroPreset: preset,
               split,
             })

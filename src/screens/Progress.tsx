@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { addDays, bmi, formatDuration, simulate, toDay, todayKey, trendKgPerDay } from '../lib/calc';
 import { latestWeight, setState, useStore, type State } from '../lib/store';
 import { Icon, r1, toast } from '../components/ui';
+import { CheckInCard } from '../components/CheckIn';
+import { visibleAdvice } from '../lib/advice';
 
 function journey(s: State) {
   const all = [...s.weighIns].sort((a, b) => a.date.localeCompare(b.date));
@@ -93,7 +95,9 @@ export function Progress({ onRecalc }: { onRecalc: () => void }) {
 
       <GoalCard />
 
-      {Math.abs(drift) >= 2 && !j.done && (
+      <CheckInCard onRecalc={onRecalc} />
+
+      {Math.abs(drift) >= 2 && !j.done && !visibleAdvice(s) && (
         <div className="callout warn row" style={{ marginTop: 14 }}>
           <div className="grow small">
             You're {r1(Math.abs(drift))} kg {drift < 0 ? 'lighter' : 'heavier'} than when your calorie target was set. Recalculating updates the target; your progress and start date stay the same.

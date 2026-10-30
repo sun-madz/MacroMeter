@@ -71,6 +71,8 @@ export interface Plan {
   startKg: number;
   startDate: string;
   calcKg?: number; // weight the calorie target was last calculated at (recalculating changes this, not the start)
+  calcDate?: string; // when the calorie target was last set
+  breakUntil?: string; // diet break (eating at maintenance) ends on this date
   macroPreset: MacroPreset;
   split: MacroSplit;
 }
@@ -81,6 +83,9 @@ export interface Settings {
   cookbookDocUrl: string;
   cookbookScriptUrl: string;
   cookbookToken: string;
+  checkinNotify: boolean; // phone notification for plan check-ins (when the app is opened)
+  checkinSnoozeUntil?: string; // YYYY-MM-DD
+  checkinNotified?: Record<string, string>; // advice id -> date notified
 }
 
 export interface State {
@@ -107,7 +112,7 @@ const initial: State = {
   version: 1,
   profile: null,
   plan: null,
-  settings: { intuitive: false, theme: 'system', cookbookDocUrl: '', cookbookScriptUrl: '', cookbookToken: '' },
+  settings: { intuitive: false, theme: 'system', cookbookDocUrl: '', cookbookScriptUrl: '', cookbookToken: '', checkinNotify: false },
   log: [],
   foods: [],
   recentFoodIds: [],

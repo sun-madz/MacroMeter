@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { todayKey, type Profile } from './lib/calc';
 import { latestWeight, setState, useStore, type MealSlot } from './lib/store';
 import { Icon, ToastHost } from './components/ui';
+import { notifyCheckIn } from './components/CheckIn';
 import { Onboarding } from './screens/Onboarding';
 import { PlanPicker } from './screens/PlanPicker';
 import { Today } from './screens/Today';
@@ -48,6 +49,17 @@ export default function App() {
     }));
   };
 
+  const recalc = () => {
+    const kg = latestWeight(s);
+    setState((st) => ({ ...st, profile: { ...st.profile!, weightKg: kg } }));
+    setChoosingPlan(true);
+  };
+
+  // Plan check-in notification (once per situation, when the app is opened or data changes)
+  useEffect(() => {
+    notifyCheckIn(s);
+  }, [s.weighIns, s.plan, s.settings.checkinNotify]); // eslint-disable-line react-hooks/exhaustive-deps
+
   let screen;
   if (!s.profile) {
     screen = <Onboarding onDone={saveProfile} />;
@@ -81,16 +93,10 @@ export default function App() {
   } else {
     screen = (
       <>
-        {view === 'today' && <Today date={date} setDate={setDate} onAdd={(slot, tab) => setAdding({ slot, tab })} goProgress={() => setView('progress')} />}
+        {view === 'today' && <Today date={date} setDate={setDate} onAdd={(slot, tab) => setAdding({ slot, tab })} goProgress={() => setView('progress')} onRecalc={recalc} />}
         {view === 'kitchen' && <Kitchen goSettings={() => setView('settings')} />}
         {view === 'progress' && (
-          <Progress
-            onRecalc={() => {
-              const kg = latestWeight(s);
-              setState((st) => ({ ...st, profile: { ...st.profile!, weightKg: kg } }));
-              setChoosingPlan(true);
-            }}
-          />
+          <Progress onRecalc={recalc} />
         )}
         {view === 'settings' && <Settings onEditProfile={() => setEditingProfile(true)} onChangePlan={() => setChoosingPlan(true)} />}
 

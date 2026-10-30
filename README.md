@@ -23,6 +23,7 @@ A calm, safe calorie-deficit and macro tracker. React + Vite, deployed on Vercel
   - *Cook*: build a meal ingredient-by-ingredient while cooking, set servings, log a serving
   - *Saved meals*: re-log or edit meals
 - **Cookbook**: send any meal's name and ingredient list to your Google Doc; you write the method yourself.
+- **Plan check-ins**: from your weigh-in trend, MacroMeter suggests easing the deficit when you're losing faster than ~1%/week, when your target outgrows your fat stores, or near your goal; a 2-week maintenance break after 12 weeks; and a recalculation if you stall for 3+ weeks. Shown as a card on Today/Progress, with optional phone notifications (when you open the app). One tap applies the new target; changes get 2 weeks to settle before the next check-in.
 - **Progress**: weigh-ins, history, chart with projection, progress bar, predicted goal date (model) and your real trend, plus a prompt to recalculate the plan when your weight has changed by 2 kg.
 - Light/dark mode, installable to the home screen (PWA manifest).
 

@@ -4,9 +4,10 @@ import { MEAL_SLOTS, logsFor, sumNutrition, useStore, type MealSlot } from '../l
 import { FillCircle, FillDot, Icon, Ring, fullnessPhrase, r0 } from '../components/ui';
 import { GoalCard } from './Progress';
 import { EntryDetail } from './EntryDetail';
+import { CheckInCard } from '../components/CheckIn';
 import type { Tab as AddTab } from './AddFood';
 
-export function Today({ date, setDate, onAdd, goProgress }: { date: string; setDate: (d: string) => void; onAdd: (slot?: MealSlot, tab?: AddTab) => void; goProgress: () => void }) {
+export function Today({ date, setDate, onAdd, goProgress, onRecalc }: { date: string; setDate: (d: string) => void; onAdd: (slot?: MealSlot, tab?: AddTab) => void; goProgress: () => void; onRecalc: () => void }) {
   const s = useStore();
   const plan = s.plan!;
   const target = macrosFor(plan.kcal, plan.split);
@@ -98,6 +99,8 @@ export function Today({ date, setDate, onAdd, goProgress }: { date: string; setD
           </div>
         </div>
       )}
+
+      <CheckInCard onRecalc={onRecalc} />
 
       <div className="grid3" style={{ marginTop: 14 }}>
         {(
