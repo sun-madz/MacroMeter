@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { askAiForFood, searchFoods } from '../lib/foodApi';
 import { searchCommon } from '../lib/commonFoods';
+import { addDays, todayKey } from '../lib/calc';
 import {
   MEAL_SLOTS,
   addLog,
@@ -15,6 +16,7 @@ import {
   type Meal,
   type MealSlot,
   type Nutrition,
+  type State,
 } from '../lib/store';
 import { KnownNumbers } from './EstimateTabs';
 import { MixBuilder } from './MixBuilder';
@@ -58,7 +60,7 @@ export function AddFood({ mode, date, slot: initialSlot, startTab = 'create', on
   const title = picked ? 'How much?' : mode === 'ingredient' ? 'Add ingredient' : 'Log food';
 
   const finish = (food: Food, n: Nutrition, amount: string, grams?: number) => {
-    rememberFood(food);
+    if (!food.id.startsWith('log-')) rememberFood(food);
     if (mode === 'ingredient') {
       onIngredient?.({ id: uid(), name: food.brand ? `${food.name} (${food.brand})` : food.name, amount, grams, ...n });
       toast(`Added ${food.name}`);
@@ -120,7 +122,7 @@ function guessSlot(): MealSlot {
   return 'snacks';
 }
 
-function FoodRow({ f, onPick, intuitive, target, onDelete }: { f: Food; onPick: (f: Food) => void; intuitive: boolean; target: number; onDelete?: () => void }) {
+function FoodRow({ f, onPick, intuitive, target, onDelete, extra }: { f: Food; onPick: (f: Food) => void; intuitive: boolean; target: number; onDelete?: () => void; extra?: string }) {
   const [confirming, setConfirming] = useState(false);
   const ref = f.per === '100g' ? nutritionFor(f, f.servingG ? 1 : 100, f.servingG ? 'serving' : 'g') : f;
   return (
@@ -128,7 +130,7 @@ function FoodRow({ f, onPick, intuitive, target, onDelete }: { f: Food; onPick: 
       <div className="grow">
         <div className="title">{f.name}</div>
         <div className="small muted">
-          {[f.brand, f.source === 'meal' ? 'Your meal' : null, intuitive ? null : f.per === '100g' ? (f.servingG && f.servingLabel ? `${r0((f.kcal * f.servingG) / 100)} kcal · ${f.servingLabel}` : `${r0(f.kcal)} kcal / 100 g`) : `${r0(f.kcal)} kcal / serving`].filter(Boolean).join(' · ') || ' '}
+          {[extra, f.brand, f.source === 'meal' ? 'Your meal' : null, intuitive ? null : f.per === '100g' ? (f.servingG && f.servingLabel ? `${r0((f.kcal * f.servingG) / 100)} kcal · ${f.servingLabel}` : `${r0(f.kcal)} kcal / 100 g`) : `${r0(f.kcal)} kcal / serving`].filter(Boolean).join(' · ') || ' '}
         </div>
       </div>
       {onDelete &&
@@ -175,8 +177,11 @@ function SearchTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; i
     const t = term.toLowerCase();
     if (!t) return [];
     const words = t.split(/\s+/);
-    return s.foods.filter((f) => f.source !== 'common' && words.every((w) => f.name.toLowerCase().includes(w))).slice(0, 6);
-  }, [term, s.foods]);
+    const match = (f: Food) => words.every((w) => f.name.toLowerCase().includes(w));
+    const mine = [...recentFromLog(s), ...s.meals.map(mealToFood), ...s.foods.filter((f) => f.source !== 'common')];
+    const seen = new Set<string>();
+    return mine.filter((f) => match(f) && !seen.has(f.name.toLowerCase()) && seen.add(f.name.toLowerCase())).slice(0, 6);
+  }, [term, s.foods, s.log, s.meals]);
   const common = useMemo(() => (term ? searchCommon(term) : []), [term]);
 
   useEffect(() => {
@@ -258,10 +263,52 @@ function SearchTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; i
   );
 }
 
+/** Everything you've logged (newest first, one per name), ready to log again. */
+function recentFromLog(s: State, limit = 40): (Food & { lastDate: string })[] {
+  const out: (Food & { lastDate: string })[] = [];
+  const seen = new Set<string>();
+  const entries = s.log.map((e, i) => ({ e, i })).sort((a, b) => b.e.date.localeCompare(a.e.date) || b.i - a.i);
+  for (const { e } of entries) {
+    // Saved meals have their own section.
+    if (e.foodId?.startsWith('meal-') && s.meals.some((m) => `meal-${m.id}` === e.foodId)) continue;
+    const key = e.name.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const known = e.foodId ? s.foods.find((f) => f.id === e.foodId) : undefined;
+    const food: Food = known ?? {
+      id: `log-${key.replace(/[^a-z0-9]+/g, '-')}`,
+      name: e.name,
+      per: 'serving',
+      servingLabel: e.amount && !/estimate|your numbers/.test(e.amount) ? e.amount : 'what you logged before',
+      kcal: e.kcal,
+      protein: e.protein,
+      carbs: e.carbs,
+      fat: e.fat,
+      source: 'custom',
+    };
+    out.push({ ...food, lastDate: e.date });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function whenLabel(date: string) {
+  const today = todayKey();
+  if (date === today) return 'Today';
+  if (date === todayKey(addDays(new Date(), -1))) return 'Yesterday';
+  return new Date(date + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 function MineTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; intuitive: boolean; target: number }) {
   const s = useStore();
-  const recent = s.recentFoodIds.map((id) => s.foods.find((f) => f.id === id)).filter((f): f is Food => !!f && f.source !== 'meal');
-  const custom = s.foods.filter((f) => f.source === 'custom' && !s.recentFoodIds.includes(f.id));
+  const fromLog = recentFromLog(s);
+  const names = new Set(fromLog.map((f) => f.name.toLowerCase()));
+  const picked = s.recentFoodIds
+    .map((id) => s.foods.find((f) => f.id === id))
+    .filter((f): f is Food => !!f && f.source !== 'meal' && !names.has(f.name.toLowerCase()));
+  const recent: (Food & { lastDate?: string })[] = [...fromLog, ...picked];
+  const shown = new Set(recent.map((f) => f.id));
+  const custom = s.foods.filter((f) => f.source === 'custom' && !shown.has(f.id));
   const meals = s.meals.map(mealToFood);
   return (
     <div className="stack">
@@ -288,7 +335,7 @@ function MineTab({ onPick, intuitive, target }: { onPick: (f: Food) => void; int
       <div className="card">
         <div className="small muted" style={{ fontWeight: 700 }}>Recent</div>
         {recent.length ? (
-          <div className="list">{recent.map((f) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} />)}</div>
+          <div className="list">{recent.map((f) => <FoodRow key={f.id} f={f} onPick={onPick} intuitive={intuitive} target={target} extra={f.lastDate ? whenLabel(f.lastDate) : undefined} />)}</div>
         ) : (
           <div className="empty">Foods you log will show up here.</div>
         )}
